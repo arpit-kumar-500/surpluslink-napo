@@ -228,6 +228,7 @@
     <div class="rule" id="ruleText">Safety check: provide preparation time and safe storage before listing. The demo uses a conservative 2-hour pickup window.</div>
   </div><div class="modal-actions"><button type="button" class="btn" id="cancel">Cancel</button><button class="btn primary" type="submit">Check &amp; list food</button></div></form>
 </div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.93.0/dist/umd/supabase.js"></script>
 <script>
   const modal=document.getElementById('modalBack'), toast=document.getElementById('toast');
   function message(s){toast.textContent=s;toast.style.display='block';clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>toast.style.display='none',3000)}
@@ -474,14 +475,28 @@
  
   /* ===================== Gateway: router, auth, pages ===================== */
   const NAMES={dashboard:'Overview',listings:'Surplus listings',partners:'Partner network',impact:'Impact'};
-  const TITLES={home:'Home',dashboard:'Dashboard',listings:'Surplus Listings',partners:'Partner Network',impact:'Impact',about:'About',auth:'Log In',terms:'Terms',privacy:'Privacy'};
-  const ROLES={kitchen:'Campus kitchen',partner:'Partner organisation'};
+  const TITLES={home:'Home',dashboard:'Dashboard',listings:'Surplus Listings',partners:'Partner Network',impact:'Impact',about:'About',auth:'Log In',setup:'Setup',terms:'Terms',privacy:'Privacy'};
+  const ROLES={kitchen:'Campus kitchen',partner:'Partner organisation',volunteer:'Volunteer',admin:'Administrator'};
   let current='home',user=null;const mem={};
   const store={get(k){try{return localStorage.getItem(k)}catch(e){return mem[k]??null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){mem[k]=v}},del(k){try{localStorage.removeItem(k)}catch(e){delete mem[k]}}};
-  const simpleHash=s=>{let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))|0;return 'h'+h}; // demo only, NOT real security
-  const getUsers=()=>{try{return JSON.parse(store.get('sl_users')||'[]')}catch(e){return[]}};
-  try{user=JSON.parse(store.get('sl_session')||'null')}catch(e){user=null}
-  if(user&&user.name==='Nimish Khandelwal'||user&&user.email==='demo@surpluslink.app'){user.name='Nimish Khandelwal';store.set('sl_session',JSON.stringify(user))}
+  /* ===== Supabase (real backend) =====
+     Paste your Project URL and PUBLISHABLE key below (Supabase -> Project Settings -> API Keys).
+     The publishable key (sb_publishable_...) is safe in the browser because Row Level Security protects the data.
+     NEVER put the secret key (sb_secret_...) in this file. */
+  const SUPABASE_URL='https://mkvvosybosbecnojiuby.supabase.co';
+  const SUPABASE_KEY='sb_publishable_y4yOPubpy3uTEugU5UJmgQ_WoTYecLS';
+  const sb=(window.supabase&&/^https:\/\/[a-z0-9-]+\.supabase\.co/.test(SUPABASE_URL))?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY):null;
+  const needsOrg=u=>!!u&&(u.role==='kitchen'||u.role==='partner')&&!u.org_id;
+  async function loadUser(){
+    user=null;if(!sb)return;
+    const{data:{session}}=await sb.auth.getSession();
+    if(!session)return;
+    const{data:p,error}=await sb.from('profiles').select('id,full_name,role,org_id').eq('id',session.user.id).maybeSingle();
+    if(error||!p)return;
+    let org=null;
+    if(p.org_id){const r=await sb.from('organizations').select('id,name,type,verification_status').eq('id',p.org_id).maybeSingle();org=r.data}
+    user={id:p.id,email:session.user.email,name:p.full_name||session.user.email.split('@')[0],role:p.role,org_id:p.org_id,org_name:org?org.name:null,org_verified:!!org&&org.verification_status==='verified'};
+  }
   const initials=n=>n.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'U';
   const go=h=>{if(location.hash===h)route();else location.hash=h};
   function parseHash(){const h=location.hash.replace(/^#\/?/,''),[path,qs='']=h.split('?');return{path:path||'home',q:new URLSearchParams(qs)}}
@@ -489,8 +504,8 @@
   function renderNavUser(){
     const el=document.getElementById('tright');
     if(!user){el.innerHTML='<a class="btn" href="#/auth?mode=signin">Log In</a><a class="btn primary" href="#/auth?mode=signup">Sign Up</a>';return}
-    el.innerHTML=`<div class="profile"><div class="avatar">${safeText(initials(user.name))}</div><span class="uname"><b>${safeText(user.name)}</b><small>${safeText(ROLES[user.role]||'Member')}</small></span></div><button class="btn" id="logout">Log out</button>`;
-    document.getElementById('logout').onclick=()=>{store.del('sl_session');user=null;renderNavUser();message('Logged out — see you soon');go('#/')};
+    el.innerHTML=`<div class="profile"><div class="avatar">${safeText(initials(user.name))}</div><span class="uname"><b>${safeText(user.name)}</b><small>${safeText(user.org_name||ROLES[user.role]||'Member')}${user.role==='partner'&&user.org_id&&!user.org_verified?' · pending verification':''}</small></span></div><button class="btn" id="logout">Log out</button>`;
+    document.getElementById('logout').onclick=async()=>{try{if(sb)await sb.auth.signOut()}catch(e){}user=null;renderNavUser();message('Logged out — see you soon');go('#/')};
   }
  
   function overviewFor(){
@@ -593,42 +608,77 @@
     <label class="field">Email<input name="email" type="email" autocomplete="email" placeholder="you@campus.edu"></label>
     <label class="field">Password<input name="password" type="password" autocomplete="${up?'new-password':'current-password'}" placeholder="${up?'At least 8 characters':'Your password'}"></label>
     <div class="auth-err" id="authErr" role="alert"></div><button class="btn primary" style="width:100%" type="submit">${up?'Create account':'Log In'}</button></form>
-    <div class="auth-or"><span>or</span></div><button class="btn" id="demoLogin" style="width:100%">⚡ Continue with demo account</button>
-    <p class="auth-note">Prototype only: accounts are stored in this browser, not on a server.</p></section></div>`;
+    <p class="auth-note">${sb?'Accounts are handled by Supabase Authentication.':'⚠️ Backend not configured yet: paste your Supabase URL and key at the top of the script.'}</p></section></div>`;
   }
   function bindAuth(mode,next){
-    const form=document.getElementById('authForm'),err=document.getElementById('authErr');
-    const finish=u=>{user=u;store.set('sl_session',JSON.stringify(u));renderNavUser();message('Welcome, '+u.name.split(' ')[0]+'!');go('#/'+(NAMES[next]?next:'dashboard'))};
-    form.onsubmit=e=>{
-      e.preventDefault();
-      const f=new FormData(form),email=String(f.get('email')||'').trim().toLowerCase(),pw=String(f.get('password')||'');
-      const fail=m=>{err.textContent=m;form.classList.remove('shake');void form.offsetWidth;form.classList.add('shake')};
-      if(!/^\S+@\S+\.\S+$/.test(email))return fail('Enter a valid email address.');
-      const all=getUsers();
-      if(mode==='signup'){
-        const name=String(f.get('name')||'').trim();
-        if(name.length<2)return fail('Please enter your name.');
-        if(pw.length<8)return fail('Password must be at least 8 characters.');
-        if(all.some(u=>u.email===email))return fail('An account with this email already exists — try logging in.');
-        const role=f.get('role')||'kitchen';all.push({name,email,role,pw:simpleHash(pw)});store.set('sl_users',JSON.stringify(all));finish({name,email,role});
-      }else{
-        const u=all.find(x=>x.email===email&&x.pw===simpleHash(pw));
-        if(!u)return fail('Incorrect email or password.');finish({name:u.name,email:u.email,role:u.role});
-      }
+    const form=document.getElementById('authForm'),err=document.getElementById('authErr'),btn=form.querySelector('button[type=submit]');
+    const fail=m=>{err.style.color='';err.textContent=m;form.classList.remove('shake');void form.offsetWidth;form.classList.add('shake');btn.disabled=false};
+    const done=async()=>{
+      await loadUser();renderNavUser();
+      if(!user)return fail('Signed in, but your profile could not be loaded. Please try again.');
+      message('Welcome, '+user.name.split(' ')[0]+'!');
+      go(needsOrg(user)?'#/setup':'#/'+(NAMES[next]?next:'dashboard'));
     };
-    document.getElementById('demoLogin').onclick=()=>finish({name:'Nimish Khandelwal',email:'demo@surpluslink.app',role:'kitchen'});
+    form.onsubmit=async e=>{
+      e.preventDefault();err.style.color='';err.textContent='';
+      if(!sb)return fail('Backend is not configured yet. Paste your Supabase URL and key into the script.');
+      const f=new FormData(form),email=String(f.get('email')||'').trim().toLowerCase(),pw=String(f.get('password')||'');
+      if(!/^\S+@\S+\.\S+$/.test(email))return fail('Enter a valid email address.');
+      btn.disabled=true;
+      try{
+        if(mode==='signup'){
+          const name=String(f.get('name')||'').trim(),role=f.get('role')==='partner'?'partner':'kitchen';
+          if(name.length<2)return fail('Please enter your name.');
+          if(pw.length<8)return fail('Password must be at least 8 characters.');
+          const{data,error}=await sb.auth.signUp({email,password:pw,options:{data:{full_name:name,role}}});
+          if(error)return fail(error.message);
+          if(!data.session){btn.disabled=false;err.style.color='var(--green)';err.textContent='Account created. Check your email to confirm it, then log in.';return}
+          await done();
+        }else{
+          const{error}=await sb.auth.signInWithPassword({email,password:pw});
+          if(error)return fail(error.message==='Invalid login credentials'?'Incorrect email or password.':error.message);
+          await done();
+        }
+      }catch(ex){fail('Network problem. Please try again.')}
+    };
   }
- 
+
+  function setupPage(){
+    const k=user.role==='kitchen';
+    return `<div class="auth-wrap"><section class="auth-card"><div class="logo">↗</div><h2>Set up your ${k?'kitchen':'organisation'}</h2><div class="sub">${k?'Tell us which campus kitchen you report from.':'Tell us about your organisation so an admin can verify it.'}</div>
+    <form id="setupForm" novalidate style="margin-top:16px">
+    <label class="field">${k?'Kitchen name':'Organisation name'}<input name="name" placeholder="${k?'e.g. Canteen A':'e.g. Community food bank'}"></label>
+    <label class="field">Address / location<input name="address" placeholder="Building, area, city"></label>
+    <label class="field">${k?'Typical portions served per day':'Portions you can take per day'}<input name="capacity" type="number" min="0" placeholder="e.g. 200"></label>
+    <div class="auth-err" id="setupErr" role="alert"></div><button class="btn primary" style="width:100%" type="submit">Save and continue</button></form>
+    ${k?'':'<p class="auth-note">Partners can see surplus listings only after an admin verifies the organisation.</p>'}</section></div>`;
+  }
+  function bindSetup(){
+    const form=document.getElementById('setupForm'),err=document.getElementById('setupErr'),btn=form.querySelector('button[type=submit]');
+    form.onsubmit=async e=>{
+      e.preventDefault();err.textContent='';
+      const f=new FormData(form),name=String(f.get('name')||'').trim(),address=String(f.get('address')||'').trim(),cap=Math.max(0,parseInt(f.get('capacity'),10)||0);
+      if(name.length<2){err.textContent='Please enter a name.';return}
+      btn.disabled=true;
+      const{error}=await sb.rpc('create_my_organization',{p_name:name,p_address:address||null,p_capacity:cap});
+      if(error){err.textContent=error.message;btn.disabled=false;return}
+      await loadUser();renderNavUser();message('Organisation saved');go('#/dashboard');
+    };
+  }
+
   function route(){
     const{path,q}=parseHash(),main=document.querySelector('main');
     const cd=document.getElementById('closeDetail');if(cd)cd.click();else modal.style.display='none';
     if(NAMES[path]&&!user){location.hash='#/auth?mode=signin&next='+path;return}
-    if(path==='auth'&&user){location.hash='#/dashboard';return}
+    if(path==='auth'&&user){location.hash=needsOrg(user)?'#/setup':'#/dashboard';return}
+    if(NAMES[path]&&needsOrg(user)){location.hash='#/setup';return}
+    if(path==='setup'&&!needsOrg(user)){location.hash=user?'#/dashboard':'#/auth?mode=signin';return}
     current=TITLES[path]?path:'home';
     document.title=(TITLES[current])+' — SurplusLink';
     document.querySelectorAll('.tlinks a').forEach(a=>a.classList.toggle('active',a.dataset.route===current));
     if(NAMES[current])renderPage(NAMES[current]);
     else if(current==='auth'){const mode=q.get('mode')==='signup'?'signup':'signin',nx=q.get('next');main.innerHTML=authPage(mode,nx);bindAuth(mode,nx)}
+    else if(current==='setup'){main.innerHTML=setupPage();bindSetup()}
     else if(current==='about')main.innerHTML=aboutPage();
     else if(current==='terms'||current==='privacy'){main.innerHTML=legalPage(current);bindLegal()}
     else{main.innerHTML=homePage();animateCounts()}
@@ -688,8 +738,13 @@
     rec.onerror=e=>{on=false;btn.classList.remove('live');say(e.error==='not-allowed'?'Microphone permission is blocked in the browser.':'Voice error: '+e.error,false)};
     btn.onclick=()=>{if(on){rec.stop();return}try{speechSynthesis.cancel();rec.start();on=true;btn.classList.add('live');show('Listening… try “open Surplus Listings”')}catch(e){}};
   })();
-  renderNavUser();route();
-  setTimeout(()=>document.getElementById('splash').classList.add('done'),800);
+  (async()=>{
+    try{await loadUser()}catch(e){user=null}
+    renderNavUser();route();
+    if(sb)sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'&&user){user=null;renderNavUser();route()}});
+    setTimeout(()=>document.getElementById('splash').classList.add('done'),400);
+  })();
+  setTimeout(()=>document.getElementById('splash').classList.add('done'),6000); // safety net if the network is slow
 </script>
 </body></html>
  
