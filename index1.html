@@ -187,14 +187,13 @@
       <div class="card"><div class="metric-label">Safe pickup window</div><div class="metric">2 <small style="font-size:13px;font-weight:550">hrs</small></div><div class="trend" style="color:var(--orange)">Next collection closes 8:30 PM</div></div>
     </section>
     <div class="layout">
-      <section class="panel"><div class="panel-top"><div><h3>Demand & surplus forecast</h3><div class="sub">Estimated portions · next 5 service days</div></div><span class="pill">● Forecast ready</span></div>
+      <section class="panel"><div class="panel-top"><div><h3>Demand & surplus forecast</h3><div class="sub">Estimated portions · next 5 service days</div></div><span class="pill warn">Sample forecast</span></div>
         <div id="forecastChart" aria-label="Demand and surplus forecast chart"></div>
         <div class="legend"><span><i style="background:#e5a33c"></i>Expected surplus</span><span><i style="background:#287653"></i>Estimated demand</span></div>
         <div class="forecast-info" id="forecastInfo" aria-live="polite">Select a bar for its forecast value.</div>
       </section>
-      <section class="panel"><div class="panel-top"><div><h3>Needs your attention</h3><div class="sub">Keep good food moving safely.</div></div><span class="pill warn">2 updates</span></div>
-        <div class="row"><div><div class="food">Dinner service estimate</div><div class="meta">Canteen A · forecast 18 extra portions</div></div><span class="pill">Today</span></div>
-        <div class="row"><div><div class="food">Pickup window closing soon</div><div class="meta">Dal & rice · collect by 8:30 PM</div></div><span class="pill warn">42 min</span></div>
+      <section class="panel"><div class="panel-top"><div><h3>Needs your attention</h3><div class="sub">Keep good food moving safely.</div></div><span class="pill warn" id="attnCount">0 items</span></div>
+        <div id="attnRows"></div>
         <div class="safety-note">✓ Every shared listing needs prep time, storage status, and a pickup deadline before a partner can accept it.</div>
       </section>
     </div>
@@ -218,15 +217,32 @@
   <div class="foot-bot"><div>© 2026 SurplusLink · North Campus<a href="#/about">About</a><a href="#/terms">Terms</a><a href="#/privacy">Privacy Policy</a></div><div class="social"><a href="#" aria-label="GitHub" title="GitHub">🐙</a><a href="#" aria-label="LinkedIn" title="LinkedIn">💼</a><a href="mailto:you@example.com" aria-label="Email" title="Email">✉️</a></div></div>
 </div></footer>
 <div class="toast" id="toast"></div>
-<div class="modal-back" id="modalBack"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><h2 id="modalTitle">Report surplus food</h2><p>Log details so we can check the pickup window and find a suitable partner.</p>
+<div class="modal-back" id="modalBack"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" style="max-height:92vh;overflow:auto">
+<div id="reportView"><h2 id="modalTitle">Report surplus food</h2><p>Log the details. The database checks the safety rules before anything is offered to a partner.</p>
   <form id="reportForm"><div class="form">
-    <label class="field">Food name<input name="food" required placeholder="e.g. Vegetable pulao"></label>
-    <label class="field">Portions available<input name="qty" type="number" min="1" required placeholder="e.g. 20"></label>
-    <label class="field">Prepared at<input name="prepared" type="time" required value="18:00"></label>
-    <label class="field">Storage since preparation<select name="storage"><option value="hot">Kept hot (60°C or above)</option><option value="cold">Kept chilled (5°C or below)</option><option value="unknown">Unknown / room temperature</option></select></label>
-    <label class="field full">Pickup by<input name="pickup" type="time" required value="20:30"></label>
-    <div class="rule" id="ruleText">Safety check: provide preparation time and safe storage before listing. The demo uses a conservative 2-hour pickup window.</div>
-  </div><div class="modal-actions"><button type="button" class="btn" id="cancel">Cancel</button><button class="btn primary" type="submit">Check &amp; list food</button></div></form>
+    <label class="field">Food name<input name="food" required maxlength="80" placeholder="e.g. Vegetable pulao"></label>
+    <label class="field">Food category<select name="category"><option value="cooked_meal">Cooked meal</option><option value="dairy_item">Dairy item</option><option value="bakery">Bakery</option><option value="produce">Fresh / cut produce</option><option value="packaged">Packaged food</option></select></label>
+    <label class="field">Portions available<input name="qty" type="number" min="1" max="5000" required placeholder="e.g. 20"></label>
+    <label class="field">Weight per portion (g)<input name="weight" type="number" min="20" max="2000" placeholder="Blank = category default"></label>
+    <label class="field">Prepared at<input name="prepared" type="datetime-local" required></label>
+    <label class="field">Storage since preparation<select name="storage"><option value="hot_held">Kept hot</option><option value="chilled">Kept chilled</option><option value="room_temp">Room temperature</option><option value="unknown">Unknown</option></select></label>
+    <label class="field">Temperature (°C)<input name="temp" type="number" step="0.1" min="-30" max="120" placeholder="Needed for hot / chilled"></label>
+    <label class="field">Pickup by<input name="pickup" type="datetime-local" required></label>
+    <label class="field full">Use-by date (required for packaged food)<input name="expiry" type="datetime-local"></label>
+    <div style="grid-column:1/-1"><div style="font-size:11px;font-weight:650;margin-bottom:6px">Allergens: tick all that apply, or tick “None”</div><div id="allergenBox" style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px">
+      <label style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" name="allergen" value="milk">Milk</label>
+      <label style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" name="allergen" value="egg">Egg</label>
+      <label style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" name="allergen" value="gluten">Gluten (wheat etc.)</label>
+      <label style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" name="allergen" value="peanuts">Peanuts</label>
+      <label style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" name="allergen" value="tree nuts">Tree nuts</label>
+      <label style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" name="allergen" value="soy">Soy</label>
+      <label style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" name="allergen" value="fish">Fish</label>
+      <label style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" name="allergen" value="shellfish">Shellfish</label>
+      <label style="display:inline-flex;gap:5px;align-items:center;font-weight:700"><input type="checkbox" name="allergen" value="none">None</label>
+    </div></div>
+    <div class="rule" id="ruleText">Safety rules are checked by the database. Blocked food is recorded as waste and never offered to partners.</div>
+  </div><div class="modal-actions"><button type="button" class="btn" id="cancel">Cancel</button><button class="btn primary" type="submit">Check &amp; list food</button></div></form></div>
+<div id="detailView" style="display:none"><h2 id="detailTitle"></h2><p id="detailSub">Live record from the SurplusLink database.</p><div id="detailBox"></div><div class="modal-actions"><button type="button" class="btn" id="closeDetail">Close</button></div></div>
 </div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.93.0/dist/umd/supabase.js"></script>
 <script>
@@ -243,28 +259,34 @@
     return h*60+min;
   }
  
-  document.getElementById('openReport').onclick=()=>modal.style.display='grid';
+  document.getElementById('openReport').onclick=()=>openReport();
   document.getElementById('cancel').onclick=()=>modal.style.display='none';
   modal.onclick=e=>{if(e.target===modal)modal.style.display='none'};
  
-  document.getElementById('reportForm').onsubmit=e=>{
+  const DEFAULT_RULE='Safety rules are checked by the database. Blocked food is recorded as waste and never offered to partners.';
+  document.getElementById('reportForm').onsubmit=async e=>{
     e.preventDefault();
-    const f=new FormData(e.target),food=f.get('food').trim(),qty=Number(f.get('qty')),storage=f.get('storage'),prepared=f.get('prepared'),pickup=f.get('pickup');
-    const toM=t=>{const [h,m]=t.split(':').map(Number);return h*60+m};
-    let safe=true,reason='';
-    if(storage==='unknown'){safe=false;reason='Storage is unknown. Keep this food separate and route it to waste.'}
-    else if(toM(pickup)<toM(prepared)||toM(pickup)-toM(prepared)>120){safe=false;reason='Pickup deadline is outside the demo’s conservative 2-hour window. Route to waste.'}
-    if(!safe){
-      const r=document.getElementById('ruleText');
-      r.textContent='⛔ '+reason;r.style.background='#fbeceb';r.style.color='#a8413c';
-      message('Safety check failed — listing blocked');return;
-    }
-    const item={id:Date.now(),food,icon:'🍲',type:'Meals',source:'Canteen A',qty,prep:prepared,storage:storage==='hot'?'Hot held · operator confirmed':'Chilled · operator confirmed',allergens:'Not provided',deadline:pickup,partner:'—',status:'Available',safety:'Eligible to share',reason:'Operator reported safe storage and a pickup deadline within the prototype’s 2-hour window. Verify local food safety requirements before handoff.'};
-    listingsData.unshift(item);
-    modal.style.display='none';e.target.reset();
-    const r=document.getElementById('ruleText');r.style.background='';r.style.color='';
-    r.textContent='Safety check: provide preparation time and safe storage before listing. The demo uses a conservative 2-hour pickup window.';
-    renderPage(NAMES[current]||'Overview');
+    const rt=document.getElementById('ruleText'),btn=e.target.querySelector('button[type=submit]');
+    const showRule=(txt,bad)=>{rt.textContent=txt;rt.style.background=bad?'#fbeceb':'';rt.style.color=bad?'#a8413c':''};
+    if(!sb||!user||user.role!=='kitchen'||!user.org_id)return showRule('⛔ Only a signed-in kitchen account can report surplus.',true);
+    const f=new FormData(e.target),al=f.getAll('allergen');
+    if(!al.length)return showRule('⛔ Declare allergens: tick the ones that apply, or tick “None”.',true);
+    if(al.includes('none')&&al.length>1)return showRule('⛔ “None” cannot be combined with other allergens.',true);
+    const food=String(f.get('food')||'').trim(),tv=String(f.get('temp')||'').trim(),wv=String(f.get('weight')||'').trim(),ev=String(f.get('expiry')||'');
+    const prep=new Date(f.get('prepared')),pick=new Date(f.get('pickup'));
+    if(food.length<2)return showRule('⛔ Please enter the food name.',true);
+    if(isNaN(+prep)||isNaN(+pick))return showRule('⛔ Please enter valid prepared and pickup times.',true);
+    const row={kitchen_id:user.org_id,food_name:food,category:f.get('category'),qty_portions:Number(f.get('qty')),prepared_at:prep.toISOString(),storage_method:f.get('storage'),temp_c:tv===''?null:Number(tv),allergens:al.includes('none')?[]:al,pickup_deadline:pick.toISOString(),expiry_at:ev?new Date(ev).toISOString():null,is_simulated:false};
+    if(wv!=='')row.weight_per_portion_g=Math.round(Number(wv));
+    btn.disabled=true;showRule('Checking the safety rules…',false);
+    const{data,error}=await sb.from('listings').insert(row).select('id,status,ineligible_reason,route').single();
+    btn.disabled=false;
+    if(error)return showRule('⛔ '+error.message,true);
+    await loadListings();
+    if(current==='dashboard')renderPage('Overview');
+    else if(current==='listings')renderPage('Surplus listings');
+    if(data.status==='rejected'){showRule('⛔ Blocked by the safety engine: '+data.ineligible_reason+'. Recorded as waste · route: '+(ROUTE[data.route]||data.route)+'.',true);message('Safety check failed — recorded as waste');return}
+    modal.style.display='none';e.target.reset();showRule(DEFAULT_RULE,false);
     message('Safety checks passed — edible surplus listed for matching');
   };
  
@@ -279,33 +301,32 @@
  
   const overviewHTML=document.querySelector('main').innerHTML;
  
-  const listingsData=[
-    {id:1,food:'Dal & steamed rice',icon:'🍲',type:'Meals',source:'Canteen A',qty:24,prep:'6:10 PM',storage:'Hot held · 63°C',allergens:'Milk',deadline:'8:30 PM',partner:'Hope Shelter',status:'Reserved',safety:'Eligible to share',reason:'Reported within 20 min of service; hot holding recorded at 63°C. Pickup by 8:30 PM.'},
-    {id:2,food:'Vegetable pulao',icon:'🍚',type:'Meals',source:'Hostel Mess',qty:18,prep:'5:45 PM',storage:'Hot held · 61°C',allergens:'None declared',deadline:'8:15 PM',partner:'Campus Care',status:'Available',safety:'Eligible to share',reason:'Hot holding recorded at 61°C. Unassigned; partner must collect by 8:15 PM.'},
-    {id:3,food:'Seasonal fruit cups',icon:'🍊',type:'Produce',source:'Canteen B',qty:16,prep:'4:50 PM',storage:'Chilled · 4°C',allergens:'May contain traces of nuts',deadline:'7:30 PM',partner:'—',status:'Picked up',safety:'Handoff completed',reason:'Chilled at 4°C before handoff. Pickup recorded at 6:42 PM.'},
-    {id:4,food:'Paneer wraps',icon:'🌯',type:'Meals',source:'Event Kitchen',qty:12,prep:'6:35 PM',storage:'Hot held · 62°C',allergens:'Milk, wheat',deadline:'8:35 PM',partner:'—',status:'Available',safety:'Eligible to share',reason:'Hot holding recorded at 62°C. Available for assignment before 8:35 PM.'},
-    {id:5,food:'Cut melon tray',icon:'🍈',type:'Produce',source:'Canteen B',qty:10,prep:'12:10 PM',storage:'Room temperature · unknown',allergens:'None declared',deadline:'2:10 PM',partner:'—',status:'Expired',safety:'Ineligible',reason:'Pickup window has elapsed and storage was not verified. Do not redistribute.'}
-  ];
-  const partnersData=[
-    {name:'Hope Shelter',icon:'🏠',type:'Community shelter',area:'North Gate · 1.2 km',capacity:42,used:24,cats:'Cooked meals, produce',hours:'Open until 9:00 PM',verified:true,active:'Collecting Dal & steamed rice · due 8:30 PM',role:'Kitchen coordinator',history:'12 pickups this month · 94% on-time',handling:'Insulated carriers · chilled storage'},
-    {name:'Campus Care',icon:'🤝',type:'Student support kitchen',area:'East Residence · 0.8 km',capacity:36,used:18,cats:'Cooked meals, bakery',hours:'Open until 8:30 PM',verified:true,active:'Reserved Vegetable pulao · due 8:15 PM',role:'Volunteer lead',history:'9 pickups this month · 100% on-time',handling:'Hot boxes · immediate service'},
-    {name:'Seva Community Hub',icon:'🌱',type:'Community food hub',area:'Market Road · 2.4 km',capacity:40,used:0,cats:'Produce, packaged food',hours:'Opens tomorrow 8:00 AM',verified:true,active:'No active pickups',role:'Distribution manager',history:'16 pickups this month · 88% on-time',handling:'Chilled van · sorting area'},
-    {name:'Night Canteen Volunteers',icon:'🍱',type:'Campus volunteer group',area:'South Gate · 1.7 km',capacity:15,used:15,cats:'Cooked meals',hours:'At capacity',verified:false,active:'Capacity reached · unavailable now',role:'Volunteer coordinator',history:'4 pickups this month · verification pending',handling:'Hot boxes · limited storage'}
-  ];
+  const listingsData=[]; // filled from Supabase by loadListings()
+  const partnersData=[],orgsPending=[]; // filled by loadPartners()
   const safeText=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const isOut=x=>['Expired','Unavailable','Ineligible'].includes(x.status);
  
-  function pageShell(kicker,title,desc,icon,action=''){return `<div class="eyebrow">${kicker} · SAMPLE OPERATIONS DATA</div><div class="page-intro"><div><h2>${title}</h2><p>${desc}</p></div><div style="display:flex;gap:8px;align-items:center"><div class="food-mark">${icon}</div>${action}</div></div>`}
+  function pageShell(kicker,title,desc,icon,action='',live=false){return `<div class="eyebrow">${kicker} · ${live?'LIVE DATA':'SAMPLE OPERATIONS DATA'}</div><div class="page-intro"><div><h2>${title}</h2><p>${desc}</p></div><div style="display:flex;gap:8px;align-items:center"><div class="food-mark">${icon}</div>${action}</div></div>`}
  
-  function listingCard(x){const expired=isOut(x);return `<article class="listing-card" data-status="${x.status}" data-type="${x.type}" data-source="${x.source}" data-partner="${x.partner}" data-safety="${x.safety}"><div class="listing-title"><div class="food-mark">${x.icon}</div><div style="flex:1"><h3>${safeText(x.food)}</h3><div class="card-meta">${safeText(x.source)} · reported ${safeText(x.prep)}</div></div><span class="chip ${expired?'red':x.status==='Reserved'?'yellow':'green'}">${safeText(x.status)}</span></div><div class="card-details"><div><div class="detail-label">QUANTITY</div><div class="detail-value">${x.qty} portions</div></div><div><div class="detail-label">STORAGE</div><div class="detail-value">${safeText(x.storage)}</div></div><div><div class="detail-label">ALLERGEN NOTES</div><div class="detail-value">${safeText(x.allergens)}</div></div><div><div class="detail-label">PICKUP DEADLINE</div><div class="detail-value">${safeText(x.deadline)}</div></div><div><div class="detail-label">PARTNER</div><div class="detail-value">${safeText(x.partner)}</div></div><div><div class="detail-label">SAFETY</div><div class="detail-value">${safeText(x.safety)}</div></div></div><div class="eligibility ${expired?'no':''}">${expired?'⛔ Do not redistribute. ':'✓ '}${safeText(x.reason)}</div><div class="card-actions"><button class="smallbtn" data-action="detail" data-id="${x.id}">View details</button>${!expired&&x.status==='Available'?`<button class="smallbtn" data-action="assign" data-id="${x.id}">Assign partner</button><button class="smallbtn" data-action="reserve" data-id="${x.id}">Reserve</button>`:''}${!expired&&x.status==='Reserved'?`<button class="smallbtn" data-action="pickup" data-id="${x.id}">Confirm pickup</button>`:''}${!expired&&x.status!=='Picked up'?`<button class="smallbtn" data-action="unavailable" data-id="${x.id}">Mark unavailable</button>`:''}</div></article>`}
+  function listingCard(x){const expired=isOut(x);return `<article class="listing-card" data-status="${x.status}" data-type="${x.type}" data-source="${x.source}" data-partner="${x.partner}" data-safety="${x.safety}"><div class="listing-title"><div class="food-mark">${x.icon}</div><div style="flex:1"><h3>${safeText(x.food)}</h3><div class="card-meta">${safeText(x.source)} · prepared ${safeText(x.prep)}</div></div><span class="chip ${expired?'red':x.status==='Reserved'?'yellow':'green'}">${safeText(x.status)}</span></div><div class="card-details"><div><div class="detail-label">QUANTITY</div><div class="detail-value">${x.qty} portions</div></div><div><div class="detail-label">STORAGE</div><div class="detail-value">${safeText(x.storage)}</div></div><div><div class="detail-label">ALLERGEN NOTES</div><div class="detail-value">${safeText(x.allergens)}</div></div><div><div class="detail-label">PICKUP DEADLINE</div><div class="detail-value">${safeText(x.deadline)}</div></div><div><div class="detail-label">PARTNER</div><div class="detail-value">${safeText(x.partner)}</div></div><div><div class="detail-label">SAFETY</div><div class="detail-value">${safeText(x.safety)}</div></div></div><div class="eligibility ${expired?'no':''}">${expired?'⛔ Do not redistribute. ':'✓ '}${safeText(x.reason)}</div><div class="card-actions"><button class="smallbtn" data-action="detail" data-id="${x.id}">View details</button>${x.status==='Available'&&user&&user.role==='kitchen'?`<button class="smallbtn" data-action="unavailable" data-id="${x.id}">Withdraw listing</button>`:''}${x.status==='Available'&&user&&user.role==='partner'&&user.org_verified?`<button class="smallbtn" data-action="reserve" data-id="${x.id}">Reserve</button>`:''}${x.status==='Reserved'&&x.resId&&user&&user.role==='partner'&&x.resMine?`<button class="smallbtn" data-action="newcode" data-id="${x.resId}">New pickup code</button><button class="smallbtn" data-action="cancelres" data-id="${x.resId}">Cancel reservation</button>`:''}${x.status==='Reserved'&&x.resId&&user&&(user.role==='kitchen'||user.role==='admin')?`<button class="smallbtn" data-action="confirmform" data-id="${x.resId}">Confirm pickup</button><button class="smallbtn" data-action="cancelres" data-id="${x.resId}">Cancel reservation</button>`:''}</div></article>`}
  
   function listingsPage(){
     const edible=listingsData.filter(x=>!isOut(x)),waste=listingsData.filter(isOut);
-    return pageShell('Food recovery','Surplus listings','Safe, time-bound handoffs for edible food. Forecast and listing details are sample data for the demo.','🥗','<button class="btn primary" id="pageReport">＋ Report surplus</button>')
-    +`<div class="filterbar"><input id="listSearch" placeholder="Search food, kitchen, partner…" aria-label="Search listings"><select id="typeFilter"><option value="">All food types</option><option>Meals</option><option>Produce</option><option>Bakery</option></select><select id="sourceFilter"><option value="">All kitchens</option><option>Canteen A</option><option>Canteen B</option><option>Hostel Mess</option><option>Event Kitchen</option></select><select id="safetyFilter"><option value="">All safety states</option><option>Eligible to share</option><option>Handoff completed</option></select><select id="sortListings"><option value="deadline">Sort: pickup deadline</option><option value="qty">Sort: quantity</option><option value="food">Sort: food name</option></select></div><div class="tabs" id="listingTabs">${['All active','Available','Reserved','Picked up'].map((x,i)=>`<button class="${i===0?'selected':''}" data-listtab="${x}">${x}</button>`).join('')}</div><div class="sub" style="margin:8px 0">${edible.length} edible listings · every available item has a pickup deadline</div><div class="listing-grid" id="listingGrid">${edible.map(listingCard).join('')}</div><div class="empty" id="listingEmpty" style="display:none">No listings match these filters. Try clearing one.</div><section class="waste-box"><h3>⛔ Waste / ineligible · Do not redistribute</h3><div class="sub">Expired or unverified items are kept out of the edible surplus workflow.</div><div class="listing-grid" id="wasteGrid">${waste.map(listingCard).join('')}</div></section>`;
+    return pageShell('Food recovery','Surplus listings','Safe, time-bound handoffs for edible food. Every listing here comes live from the database, and the safety engine decides what is edible.','🥗','<button class="btn primary" id="pageReport">＋ Report surplus</button>',true)
+    +(user&&user.role==='partner'&&!user.org_verified?'<div class="eligibility no" style="margin-bottom:10px">Your organisation is waiting for admin verification. Surplus listings will appear here once it is approved.</div>':'')
+    +`<div class="filterbar"><input id="listSearch" placeholder="Search food, kitchen, partner…" aria-label="Search listings"><select id="typeFilter"><option value="">All food types</option><option>Meals</option><option>Dairy</option><option>Bakery</option><option>Produce</option><option>Packaged</option></select><select id="sourceFilter"><option value="">All kitchens</option>${[...new Set(listingsData.map(x=>x.source))].sort().map(n=>`<option>${safeText(n)}</option>`).join('')}</select><select id="safetyFilter"><option value="">All safety states</option><option>Eligible to share</option><option>Handoff completed</option></select><select id="sortListings"><option value="deadline">Sort: pickup deadline</option><option value="qty">Sort: quantity</option><option value="food">Sort: food name</option></select></div><div class="tabs" id="listingTabs">${['All active','Available','Reserved','Picked up'].map((x,i)=>`<button class="${i===0?'selected':''}" data-listtab="${x}">${x}</button>`).join('')}</div><div class="sub" id="listCount" style="margin:8px 0">${edible.length} edible listings · every available item has a pickup deadline</div><div class="listing-grid" id="listingGrid">${edible.map(listingCard).join('')}</div><div class="empty" id="listingEmpty" style="display:none">No listings match these filters. Try clearing one.</div><section class="waste-box"><h3>⛔ Waste / ineligible · Do not redistribute</h3><div class="sub">Expired or unverified items are kept out of the edible surplus workflow.</div><div class="listing-grid" id="wasteGrid">${waste.map(listingCard).join('')}</div></section>`;
   }
  
-  function partnerPage(){return pageShell('Coordination','Partner network','Find verified local organizations with capacity for a safe, timely collection. Sample directory data.','🏠','<button class="btn primary" id="invitePartner">＋ Invite partner</button>')+`<div class="cards"><div class="card"><div class="metric-label">Verified partners</div><div class="metric">3</div><div class="trend">In the North Campus network</div></div><div class="card"><div class="metric-label">Available now</div><div class="metric">2</div><div class="trend">With remaining pickup capacity</div></div><div class="card"><div class="metric-label">Active pickups</div><div class="metric">2</div><div class="trend">One due within 45 minutes</div></div><div class="card"><div class="metric-label">Combined open capacity</div><div class="metric">36 <small style="font-size:13px">portions</small></div><div class="trend">Sample partner capacity</div></div></div><div class="filterbar"><input id="partnerSearch" placeholder="Search organization or service area…"><select id="distanceFilter"><option value="all">Any distance</option><option value="1">Within 1 km</option><option value="2">Within 2 km</option></select><select id="capacityFilter"><option value="0">Any open capacity</option><option value="10">10+ portions</option><option value="20">20+ portions</option></select><select id="categoryFilter"><option value="">All food categories</option><option value="Cooked meals">Cooked meals</option><option value="Produce">Produce</option><option value="Bakery">Bakery</option></select><select id="availabilityFilter"><option value="all">All availability</option><option value="yes">Available now</option><option value="no">Unavailable</option></select></div><div class="partner-grid" id="partnerGrid">${partnersData.map((p,i)=>`<article class="partner-card" data-name="${safeText(p.name)}" data-area="${safeText(p.area)}" data-distance="${parseFloat(p.area.match(/[\d.]+/)[0])}" data-capacity="${p.capacity-p.used}" data-cats="${safeText(p.cats)}" data-available="${p.capacity>p.used&&p.verified&&p.hours.includes('Open until')}"><div class="partner-top"><div style="display:flex;gap:10px"><div class="partner-emoji">${p.icon}</div><div><h3>${safeText(p.name)}</h3><div class="partner-type">${safeText(p.type)}</div></div></div><span class="chip ${p.verified?'green':'yellow'}">${p.verified?'✓ Verified':'Review needed'}</span></div><div class="partner-facts"><span class="chip">${safeText(p.area)}</span><span class="chip ${p.capacity>p.used?'green':'red'}">${Math.max(0,p.capacity-p.used)} portions open</span><span class="chip">${safeText(p.hours)}</span></div><div class="detail-label">ACCEPTS</div><div class="detail-value" style="margin:3px 0 11px">${safeText(p.cats)}</div><div class="eligibility">${safeText(p.active)}</div><div class="card-actions"><button class="smallbtn" data-action="partnerDetail" data-id="${i}">View profile</button><button class="smallbtn" data-action="schedule" data-id="${i}">Pickup schedule</button><button class="smallbtn" data-action="partnerAssign" data-id="${i}" ${p.capacity<=p.used||!p.verified?'disabled':''}>Assign listing</button></div></article>`).join('')}</div><div class="empty" id="partnerEmpty" style="display:none">No partners match these filters.</div>`}
+  function partnerCard(p,i){
+    return `<article class="partner-card"><div class="partner-top"><div style="display:flex;gap:10px"><div class="partner-emoji">🏠</div><div><h3>${safeText(p.name)}${p.mine?' (your organisation)':''}</h3><div class="partner-type">${safeText(p.address)}</div></div></div><span class="chip green">✓ Verified</span></div><div class="partner-facts"><span class="chip ${p.left>0?'green':'red'}">${p.left} of ${p.capacity} portions left today</span><span class="chip">${safeText(p.hours)}</span></div><div class="detail-label">ACCEPTS</div><div class="detail-value" style="margin:3px 0 11px">${safeText(p.cats)}</div><div class="card-actions"><button class="smallbtn" data-action="partnerDetail" data-id="${i}">View profile</button></div></article>`;
+  }
+  function partnerPage(){
+    const open=partnersData.filter(p=>p.left>0).length,openPortions=partnersData.reduce((t,p)=>t+p.left,0),active=listingsData.filter(x=>x.status==='Reserved').length;
+    const pend=user&&user.role==='admin'?`<section class="panel" style="margin-bottom:14px"><div class="panel-top"><div><h3>Organisations waiting for verification</h3><div class="sub">Only an admin can approve partners. Approved partners can see and reserve surplus food.</div></div><span class="pill warn">${orgsPending.length} pending</span></div>${orgsPending.length?orgsPending.map(o=>`<div class="row"><div><div class="food">${safeText(o.name)}</div><div class="meta">${safeText(o.address||'No address given')} · ${o.capacity_per_day} portions per day</div></div><div style="display:flex;gap:6px"><button class="smallbtn" data-action="approveorg" data-id="${o.id}">Approve</button><button class="smallbtn" data-action="rejectorg" data-id="${o.id}">Reject</button></div></div>`).join(''):'<div class="empty">No organisations are waiting.</div>'}</section>`:'';
+    return pageShell('Coordination','Partner network','Verified organisations that can collect surplus food, with their remaining capacity for today.','🏠','',true)+pend
+    +`<div class="cards"><div class="card"><div class="metric-label">Verified partners</div><div class="metric">${partnersData.length}</div><div class="trend">Approved by an admin</div></div><div class="card"><div class="metric-label">Can take food now</div><div class="metric">${open}</div><div class="trend">With capacity left today</div></div><div class="card"><div class="metric-label">Open capacity today</div><div class="metric">${openPortions} <small style="font-size:13px">portions</small></div><div class="trend">Across all verified partners</div></div><div class="card"><div class="metric-label">Active reservations</div><div class="metric">${active}</div><div class="trend">Waiting for pickup</div></div></div>`
+    +`<div class="filterbar"><input id="partnerSearch" placeholder="Search organisation or address…" aria-label="Search partners"><select id="categoryFilter"><option value="">All food categories</option><option value="cooked_meal">Cooked meals</option><option value="dairy_item">Dairy</option><option value="bakery">Bakery</option><option value="produce">Produce</option><option value="packaged">Packaged food</option></select><select id="availabilityFilter"><option value="all">All availability</option><option value="yes">Capacity left today</option><option value="no">Full for today</option></select></div><div class="partner-grid" id="partnerGrid"></div><div class="empty" id="partnerEmpty" style="display:none">No partners match these filters.</div>`;
+  }
  
   /* ===== Single source of truth: 180 days of daily records (Nov 2, 2026 backwards) =====
      Every Impact card, chart bar, axis and the dashboard/home "this week" figures are computed from this array. */
@@ -364,83 +385,108 @@
     const apply=()=>{
       const q=document.getElementById('listSearch').value.toLowerCase(),type=document.getElementById('typeFilter').value,source=document.getElementById('sourceFilter').value,safety=document.getElementById('safetyFilter').value,sort=document.getElementById('sortListings').value;
       let rows=listingsData.filter(x=>!isOut(x)&&(!q||(x.food+' '+x.source+' '+x.partner).toLowerCase().includes(q))&&(!type||x.type===type)&&(!source||x.source===source)&&(!safety||x.safety===safety)&&(tab==='All active'||x.status===tab));
-      rows.sort((a,b)=>sort==='qty'?b.qty-a.qty:sort==='food'?a.food.localeCompare(b.food):toMinutes(a.deadline)-toMinutes(b.deadline));
+      rows.sort((a,b)=>sort==='qty'?b.qty-a.qty:sort==='food'?a.food.localeCompare(b.food):(a.deadlineTs||0)-(b.deadlineTs||0));
       grid.innerHTML=rows.map(listingCard).join('');
+      const wg=document.getElementById('wasteGrid');if(wg)wg.innerHTML=listingsData.filter(isOut).map(listingCard).join('');
+      const lc=document.getElementById('listCount');if(lc)lc.textContent=listingsData.filter(x=>!isOut(x)).length+' edible listings · every available item has a pickup deadline';
       document.getElementById('listingEmpty').style.display=rows.length?'none':'block';
     };
     ['listSearch','typeFilter','sourceFilter','safetyFilter','sortListings'].forEach(id=>document.getElementById(id).addEventListener('input',apply));
     document.querySelectorAll('[data-listtab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-listtab]').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');tab=b.dataset.listtab;apply()});
-    document.getElementById('pageReport').onclick=()=>{modal.style.display='grid'};
+    document.getElementById('pageReport').onclick=()=>openReport();
+    window.refreshListingsView=apply;
     apply();
   }
  
   function bindPartners(){
+    const grid=document.getElementById('partnerGrid');if(!grid)return;
     const apply=()=>{
-      const q=document.getElementById('partnerSearch').value.toLowerCase(),dist=document.getElementById('distanceFilter').value,cap=Number(document.getElementById('capacityFilter').value),cat=document.getElementById('categoryFilter').value,avail=document.getElementById('availabilityFilter').value;
-      let shown=0;
-      document.querySelectorAll('.partner-card').forEach(c=>{
-        const ok=(!q||(c.dataset.name+' '+c.dataset.area).toLowerCase().includes(q))&&(dist==='all'||Number(c.dataset.distance)<=Number(dist))&&Number(c.dataset.capacity)>=cap&&(!cat||c.dataset.cats.includes(cat))&&(avail==='all'||(avail==='yes'?c.dataset.available==='true':c.dataset.available==='false'));
-        c.style.display=ok?'':'none';if(ok)shown++;
-      });
-      document.getElementById('partnerEmpty').style.display=shown?'none':'block';
+      const q=(document.getElementById('partnerSearch').value||'').toLowerCase(),cat=document.getElementById('categoryFilter').value,av=document.getElementById('availabilityFilter').value;
+      const rows=partnersData.map((p,i)=>[p,i]).filter(([p])=>(!q||(p.name+' '+p.address).toLowerCase().includes(q))&&(!cat||p.catKeys.length===0||p.catKeys.includes(cat))&&(av==='all'||(av==='yes'?p.left>0:p.left===0)));
+      grid.innerHTML=rows.map(([p,i])=>partnerCard(p,i)).join('');
+      document.getElementById('partnerEmpty').style.display=rows.length?'none':'block';
     };
-    ['partnerSearch','distanceFilter','capacityFilter','categoryFilter','availabilityFilter'].forEach(id=>document.getElementById(id).addEventListener('input',apply));
-    document.getElementById('invitePartner').onclick=()=>message('Demo invite prepared — partner onboarding is not connected to a live service');
+    ['partnerSearch','categoryFilter','availabilityFilter'].forEach(id=>document.getElementById(id).addEventListener('input',apply));
+    window.refreshPartnersView=apply;apply();
   }
  
-  function showDetail(html,title){
-    document.getElementById('modalTitle').textContent=title;
-    document.querySelector('#modalBack .modal>p').textContent='Sample record · use verified local handling rules for real transfers.';
-    document.querySelector('#modalBack form').style.display='none';
-    let box=document.getElementById('detailBox');
-    if(!box){box=document.createElement('div');box.id='detailBox';document.querySelector('#modalBack .modal').insertBefore(box,document.querySelector('#modalBack .modal-actions'))}
-    box.innerHTML=html;
-    document.querySelector('#modalBack .modal-actions').innerHTML='<button type="button" class="btn" id="closeDetail">Close</button>';
-    document.getElementById('closeDetail').onclick=()=>{
-      modal.style.display='none';box.remove();
-      document.getElementById('modalTitle').textContent='Report surplus food';
-      document.querySelector('#modalBack .modal>p').textContent='Log details so we can check the pickup window and find a suitable partner.';
-      document.querySelector('#modalBack form').style.display='';
-      document.querySelector('#modalBack .modal-actions').innerHTML='<button type="button" class="btn" id="cancel">Cancel</button><button class="btn primary" type="submit">Check &amp; list food</button>';
-      document.getElementById('cancel').onclick=()=>modal.style.display='none';
-    };
+  function showDetail(html,title,sub){
+    document.getElementById('detailTitle').textContent=title;
+    document.getElementById('detailSub').textContent=sub||'Live record from the SurplusLink database.';
+    document.getElementById('detailBox').innerHTML=html;
+    document.getElementById('reportView').style.display='none';
+    document.getElementById('detailView').style.display='';
     modal.style.display='grid';
   }
- 
-  document.addEventListener('click',e=>{
+  document.getElementById('closeDetail').onclick=()=>{modal.style.display='none';document.getElementById('reportView').style.display='';document.getElementById('detailView').style.display='none'};
+
+  const codeBox=(code,sub)=>`<div class="modal-content"><div class="eligibility">✓ ${sub}</div><div style="text-align:center;font-size:40px;font-weight:800;letter-spacing:.2em;margin:18px 0">${safeText(code)}</div><p class="sub">This code is shown only once and is not stored in readable form. If you lose it, use “New pickup code” on the listing. Show it to the kitchen only when you arrive to collect the food.</p></div>`;
+  document.addEventListener('click',async e=>{
     const a=e.target.closest('[data-action]');if(!a)return;
-    const id=Number(a.dataset.id);
-    if(a.dataset.action==='detail'){
-      const x=listingsData.find(z=>z.id===id),out=isOut(x);
-      showDetail(`<div class="modal-content"><div class="eligibility ${out?'no':''}">${out?'⛔ Do not redistribute · ':'✓ Eligibility: '}${safeText(x.reason)}</div><div class="card-details"><div><div class="detail-label">ITEM</div><div class="detail-value">${safeText(x.food)}</div></div><div><div class="detail-label">QUANTITY</div><div class="detail-value">${x.qty} portions</div></div><div><div class="detail-label">SOURCE KITCHEN</div><div class="detail-value">${safeText(x.source)}</div></div><div><div class="detail-label">PREPARATION TIME</div><div class="detail-value">${safeText(x.prep)}</div></div><div><div class="detail-label">STORAGE</div><div class="detail-value">${safeText(x.storage)}</div></div><div><div class="detail-label">ALLERGEN NOTES</div><div class="detail-value">${safeText(x.allergens)}</div></div><div><div class="detail-label">PICKUP DEADLINE</div><div class="detail-value">${safeText(x.deadline)}</div></div><div><div class="detail-label">PARTNER</div><div class="detail-value">${safeText(x.partner)}</div></div></div></div>`,x.food);
-    }else if(a.dataset.action==='partnerDetail'){
-      const p=partnersData[id];
-      showDetail(`<div class="modal-content"><div class="partner-facts"><span class="chip green">${p.verified?'Verified organization':'Verification pending'}</span><span class="chip">${p.area}</span><span class="chip">${p.capacity-p.used} portions available</span></div><p><b>Contact role:</b> ${p.role}</p><p><b>Accepted food:</b> ${p.cats}</p><p><b>Hours:</b> ${p.hours}</p><p><b>Handling:</b> ${p.handling}</p><p><b>Pickup history:</b> ${p.history}</p><p><b>Current schedule:</b> ${p.active}</p></div>`,p.name);
-    }else if(a.dataset.action==='schedule'){
-      message(partnersData[id].name+': '+partnersData[id].active);
-    }else if(a.dataset.action==='partnerAssign'){
-      const p=partnersData[id],x=listingsData.find(z=>z.status==='Available'&&p.verified&&p.capacity-p.used>=z.qty&&p.hours.includes('Open until'));
-      if(!x){message('No eligible available listing fits this partner’s remaining capacity')}
-      else{x.status='Reserved';x.partner=p.name;p.used+=x.qty;p.active='Reserved '+x.food+' · pickup by '+x.deadline;message(x.food+' reserved for '+p.name);renderPage('Partner network')}
-    }else{
-      const x=listingsData.find(z=>z.id===id);
-      if(a.dataset.action==='assign'||a.dataset.action==='reserve'){
-        const p=a.dataset.action==='reserve'?partnersData.find(z=>z.name==='Hope Shelter'&&z.verified&&z.capacity-z.used>=x.qty):partnersData.find(z=>z.verified&&z.capacity-z.used>=x.qty&&z.hours.includes('Open until'));
-        if(p){x.status='Reserved';x.partner=p.name;p.used+=x.qty;p.active='Reserved '+x.food+' · pickup by '+x.deadline;message(x.food+' assigned to '+p.name)}
-        else message('No verified partner has enough remaining capacity');
+    const act=a.dataset.action,rid=a.dataset.id,id=Number(rid);
+    if(act==='detail'){
+      const x=listingsData.find(z=>String(z.id)===rid);if(!x)return;
+      const out=isOut(x);
+      showDetail(`<div class="modal-content"><div class="eligibility ${out?'no':''}">${out?'⛔ Do not redistribute · ':'✓ '}${safeText(x.reason)}</div><div class="card-details"><div><div class="detail-label">ITEM</div><div class="detail-value">${safeText(x.food)}</div></div><div><div class="detail-label">QUANTITY</div><div class="detail-value">${x.qty} portions (~${x.kg} kg)</div></div><div><div class="detail-label">SOURCE KITCHEN</div><div class="detail-value">${safeText(x.source)}</div></div><div><div class="detail-label">PREPARATION TIME</div><div class="detail-value">${safeText(x.prep)}</div></div><div><div class="detail-label">STORAGE</div><div class="detail-value">${safeText(x.storage)}</div></div><div><div class="detail-label">ALLERGEN NOTES</div><div class="detail-value">${safeText(x.allergens)}</div></div><div><div class="detail-label">SAFE PICKUP WINDOW ENDS</div><div class="detail-value">${safeText(x.deadline)}</div></div><div><div class="detail-label">PARTNER</div><div class="detail-value">${safeText(x.partner)}</div></div></div><div class="detail-label" style="margin-bottom:6px">CHAIN OF CUSTODY</div><div id="custody" class="sub">Loading…</div></div>`,x.food);
+      if(sb){
+        const{data,error}=await sb.from('listing_events').select('event_type,payload,created_at').eq('listing_id',rid).order('created_at');
+        const el=document.getElementById('custody');if(!el)return;
+        if(error||!data||!data.length){el.textContent=error?'Could not load the history.':'No events recorded yet.';return}
+        el.className='timeline';
+        const evs=data.filter(ev=>{const p=ev.payload||{};return !(ev.event_type==='status_changed'&&(p.to==='reserved'||p.to==='picked_up'||(p.from==='reserved'&&p.to==='available')))});
+        el.innerHTML=evs.map(ev=>{const p=ev.payload||{};const t=ev.event_type==='created'?'Reported · '+(p.eligibility==='eligible'?'passed safety checks':'blocked by safety checks'):ev.event_type==='reserved'?'Reserved by '+(p.partner||'a partner'):ev.event_type==='pickup_confirmed'?'Pickup confirmed · handed to '+(p.partner||'the partner'):ev.event_type==='reservation_cancelled'?'Reservation cancelled':ev.event_type==='status_changed'?'Status: '+(ST[p.from]||p.from)+' → '+(ST[p.to]||p.to):ev.event_type;return `<div class="timeline-item"><b>${safeText(t)}</b><div>${safeText(fmtWhen(ev.created_at))}</div></div>`}).join('');
       }
-      if(a.dataset.action==='pickup'){
-        const p=partnersData.find(z=>z.name===x.partner);
-        if(p){p.used=Math.max(0,p.used-x.qty);p.active='Available for another safe pickup';}
-        x.status='Picked up';message('Pickup recorded for '+x.food);
-      }
-      if(a.dataset.action==='unavailable'){
-        x.status='Unavailable';x.safety='Withdrawn';x.reason='Withdrawn by the operator; not offered for redistribution.';message(x.food+' removed from available surplus');
-      }
-      renderPage('Surplus listings');
+    }else if(act==='partnerDetail'){
+      const p=partnersData[id];if(!p)return;
+      showDetail(`<div class="modal-content"><div class="partner-facts"><span class="chip green">✓ Verified organisation</span><span class="chip ${p.left>0?'green':'red'}">${p.left} portions left today</span></div><p><b>Address:</b> ${safeText(p.address)}</p><p><b>Daily capacity:</b> ${p.capacity} portions (${p.used} reserved or collected today)</p><p><b>Accepts:</b> ${safeText(p.cats)}</p><p><b>Hours:</b> ${safeText(p.hours)}</p></div>`,p.name,'Live record from the SurplusLink database.');
+    }else if(act==='reserve'){
+      if(!sb)return;
+      a.disabled=true;
+      const{data,error}=await sb.rpc('reserve_listing',{p_listing:rid});
+      if(error){a.disabled=false;message(error.message);return}
+      await loadListings();renderPage(NAMES[current]||'Overview');
+      showDetail(codeBox(data.pickup_code,'Reserved. Collect before '+fmtWhen(data.deadline)+'.'),'Your pickup code','Keep this code private until you reach the kitchen.');
+    }else if(act==='newcode'){
+      const{data,error}=await sb.rpc('regenerate_pickup_code',{p_reservation:rid});
+      if(error)return message(error.message);
+      showDetail(codeBox(data,'New code issued. The old code no longer works.'),'Your pickup code','Keep this code private until you reach the kitchen.');
+    }else if(act==='cancelres'){
+      if(!confirm('Cancel this reservation?'))return;
+      const{error}=await sb.rpc('cancel_reservation',{p_reservation:rid});
+      if(error)return message(error.message);
+      await loadListings();renderPage(NAMES[current]||'Overview');message('Reservation cancelled');
+    }else if(act==='confirmform'){
+      showDetail(`<div class="modal-content"><p class="sub" style="margin-bottom:10px">Ask the partner for the 6-digit code they received when they reserved the food, then enter it here. Hand over the food only if the code is accepted.</p><label class="field">Pickup code<input id="pickupCode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="6 digits" style="font-size:20px;letter-spacing:.2em"></label><div class="auth-err" id="pickupMsg" role="alert"></div><button class="btn primary" style="width:100%" data-action="confirmsubmit" data-id="${rid}">Confirm handoff</button></div>`,'Confirm pickup','The code is checked by the database.');
+      setTimeout(()=>{const i=document.getElementById('pickupCode');if(i)i.focus()},50);
+    }else if(act==='confirmsubmit'){
+      const code=String((document.getElementById('pickupCode')||{}).value||'').trim(),msg=document.getElementById('pickupMsg');
+      if(!/^\d{6}$/.test(code)){msg.textContent='Enter the 6-digit code.';return}
+      a.disabled=true;
+      const{data,error}=await sb.rpc('confirm_pickup',{p_reservation:rid,p_code:code});
+      a.disabled=false;
+      if(error){msg.textContent=error.message;return}
+      if(!data.ok){msg.textContent=data.error+(data.attempts_left>0?' · '+data.attempts_left+' attempt(s) left':'');return}
+      document.getElementById('closeDetail').click();
+      await loadListings();renderPage(NAMES[current]||'Overview');message('Handoff recorded — food kept in use');
+    }else if(act==='approveorg'||act==='rejectorg'){
+      const st=act==='approveorg'?'verified':'rejected';
+      const{error}=await sb.from('organizations').update({verification_status:st}).eq('id',rid);
+      if(error)return message(error.message);
+      message(st==='verified'?'Partner approved':'Partner rejected');
+      await loadPartners();
+      if(current==='partners'){document.querySelector('main').innerHTML=partnerPage();bindPartners()}
+    }else if(act==='notifs'){
+      openNotifs();
+    }else if(act==='unavailable'){
+      if(!sb)return;
+      const x=listingsData.find(z=>String(z.id)===rid);
+      const{error}=await sb.from('listings').update({status:'withdrawn'}).eq('id',rid);
+      if(error)return message('Could not withdraw: '+error.message);
+      await loadListings();renderPage(NAMES[current]||'Overview');
+      message((x?x.food:'Listing')+' withdrawn — recorded in the audit trail');
     }
   });
- 
+
   function renderForecast(){
     const data=[['Mon',280,42],['Tue',305,51],['Wed',250,36],['Thu',330,58],['Fri',290,47]],max=400,chart=document.getElementById('forecastChart');
     if(!chart)return;
@@ -497,6 +543,99 @@
     if(p.org_id){const r=await sb.from('organizations').select('id,name,type,verification_status').eq('id',p.org_id).maybeSingle();org=r.data}
     user={id:p.id,email:session.user.email,name:p.full_name||session.user.email.split('@')[0],role:p.role,org_id:p.org_id,org_name:org?org.name:null,org_verified:!!org&&org.verification_status==='verified'};
   }
+  /* ===== Live listings ===== */
+  const CAT={cooked_meal:{type:'Meals',icon:'🍲'},dairy_item:{type:'Dairy',icon:'🥛'},bakery:{type:'Bakery',icon:'🥖'},produce:{type:'Produce',icon:'🥗'},packaged:{type:'Packaged',icon:'📦'}};
+  const ST={available:'Available',reserved:'Reserved',picked_up:'Picked up',expired:'Expired',withdrawn:'Unavailable',rejected:'Ineligible'};
+  const STORE={hot_held:'Hot held',chilled:'Chilled',room_temp:'Room temperature',unknown:'Unknown'};
+  const ROUTE={people:'redistribution to people',animal_feed:'animal feed',compost:'compost',biogas:'biogas',landfill:'landfill'};
+  const fmtWhen=iso=>{if(!iso)return '—';const d=new Date(iso),t=d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true}).toUpperCase();return d.toDateString()===new Date().toDateString()?t:d.getDate()+' '+MON[d.getMonth()]+', '+t};
+  function mapListing(r){
+    const c=CAT[r.category]||{type:'Meals',icon:'🍲'},res=(r.reservations||[]).find(x=>x.status==='reserved'||x.status==='picked_up'),partner=res&&res.partner?res.partner.name:'—';
+    const al=r.allergens&&r.allergens.length?r.allergens.join(', '):'None declared by kitchen',route=ROUTE[r.route]||r.route,st=ST[r.status]||r.status;
+    let safety='Eligible to share',reason='Passed all safety checks. Safe pickup window ends '+fmtWhen(r.effective_deadline)+'.';
+    if(r.status==='rejected'){safety='Ineligible';reason=(r.ineligible_reason||'Failed the safety check')+'. Recorded as waste · route: '+route+'.'}
+    else if(r.status==='expired'){safety='Expired';reason='The safe pickup window ended at '+fmtWhen(r.effective_deadline)+'. Recorded as waste · route: '+route+'.'}
+    else if(r.status==='withdrawn'){safety='Withdrawn';reason='Withdrawn by the kitchen; not offered for redistribution.'}
+    else if(r.status==='picked_up'){safety='Handoff completed';reason='Pickup completed.'}
+    else if(r.status==='reserved'){reason='Reserved by '+partner+'. Safe pickup window ends '+fmtWhen(r.effective_deadline)+'.'}
+    return{id:r.id,food:r.food_name,icon:c.icon,type:c.type,source:(r.kitchen&&r.kitchen.name)||'Kitchen',qty:r.qty_portions,prep:fmtWhen(r.prepared_at),storage:(STORE[r.storage_method]||r.storage_method)+(r.temp_c!=null?' · '+r.temp_c+'°C':''),allergens:al,deadline:fmtWhen(r.effective_deadline),deadlineTs:r.effective_deadline?+new Date(r.effective_deadline):0,partner,resId:res?res.id:null,resMine:!!res&&!!user&&res.partner_id===user.org_id,status:st,safety,reason,kg:Math.round(r.qty_portions*r.weight_per_portion_g/10)/100,route:r.route};
+  }
+  async function loadListings(){
+    if(!sb||!user)return;
+    const{data,error}=await sb.from('listings').select('*, kitchen:organizations!kitchen_id(name), reservations!listing_id(id, status, partner_id, partner:organizations!partner_id(name))').order('created_at',{ascending:false}).limit(300);
+    if(error){message('Could not load listings: '+error.message);return}
+    listingsData.length=0;data.forEach(r=>listingsData.push(mapListing(r)));
+  }
+  let rtChan=null,rtTimer=null;
+  function refreshLive(){
+    clearTimeout(rtTimer);
+    rtTimer=setTimeout(async()=>{
+      await loadListings();
+      if(current==='dashboard')renderPage('Overview');
+      else if(current==='listings'&&window.refreshListingsView&&document.getElementById('listingGrid'))window.refreshListingsView();
+      else if(current==='partners'&&window.refreshPartnersView&&document.getElementById('partnerGrid')){await loadPartners();window.refreshPartnersView()}
+    },350);
+  }
+  function startRealtime(){
+    if(!sb||!user)return;
+    startNotifs();
+    if(rtChan)return;
+    rtChan=sb.channel('listings-live').on('postgres_changes',{event:'*',schema:'public',table:'listings'},()=>refreshLive()).subscribe();
+  }
+  function stopRealtime(){if(rtChan&&sb){sb.removeChannel(rtChan);rtChan=null}stopNotifs()}
+  const CATLABEL={cooked_meal:'Cooked meals',dairy_item:'Dairy',bakery:'Bakery',produce:'Produce',packaged:'Packaged food'};
+  async function loadPartners(){
+    partnersData.length=0;orgsPending.length=0;
+    if(!sb||!user)return;
+    const{data,error}=await sb.rpc('partner_directory');
+    if(error){message('Could not load partners: '+error.message);return}
+    (data||[]).forEach(p=>partnersData.push({id:p.id,name:p.name,address:p.address||'Address not provided',capacity:p.capacity_per_day,used:p.used_today,left:Math.max(0,p.capacity_per_day-p.used_today),catKeys:p.accepted_categories||[],cats:(p.accepted_categories&&p.accepted_categories.length)?p.accepted_categories.map(c=>CATLABEL[c]||c).join(', '):'All categories',hours:(p.open_from&&p.open_until)?String(p.open_from).slice(0,5)+' – '+String(p.open_until).slice(0,5):'Hours not set',mine:!!p.is_mine}));
+    if(user.role==='admin'){
+      const r=await sb.from('organizations').select('id,name,address,capacity_per_day,created_at').eq('type','partner').eq('verification_status','pending').order('created_at');
+      if(!r.error)(r.data||[]).forEach(o=>orgsPending.push(o));
+    }
+  }
+  let notifs=[],notifChan=null;
+  const NOTIF_TXT=n=>{const p=n.payload||{};return n.type==='listing_reserved'?(p.partner||'A partner')+' reserved '+p.food+' ('+p.qty+' portions)':n.type==='pickup_confirmed'?'Pickup confirmed: '+p.food+' ('+p.qty+' portions)':n.type==='reservation_cancelled'?'Reservation cancelled: '+p.food:String(n.type)};
+  function updateBell(){const b=document.getElementById('bellCount');if(!b)return;const n=notifs.filter(x=>!x.read).length;b.textContent=n;b.style.display=n?'':'none'}
+  async function loadNotifs(){
+    if(!sb||!user){notifs=[];updateBell();return}
+    const{data}=await sb.from('notifications').select('id,type,payload,read,created_at').order('created_at',{ascending:false}).limit(30);
+    notifs=data||[];updateBell();
+  }
+  async function openNotifs(){
+    showDetail(notifs.length?`<div class="modal-content">${notifs.map(n=>`<div class="row"><div><div class="food" style="font-weight:${n.read?500:700}">${safeText(NOTIF_TXT(n))}</div><div class="meta">${safeText(fmtWhen(n.created_at))}</div></div></div>`).join('')}</div>`:'<div class="empty">No notifications yet.</div>','Notifications','Live updates about reservations and pickups.');
+    if(sb&&notifs.some(x=>!x.read)){await sb.from('notifications').update({read:true}).eq('read',false);notifs.forEach(x=>x.read=true);updateBell()}
+  }
+  function startNotifs(){
+    if(!sb||!user||notifChan)return;
+    loadNotifs();
+    notifChan=sb.channel('notifs-'+user.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:'user_id=eq.'+user.id},p=>{const n=p.new;notifs.unshift(n);updateBell();message('🔔 '+NOTIF_TXT(n))}).subscribe();
+  }
+  function stopNotifs(){if(notifChan&&sb){sb.removeChannel(notifChan);notifChan=null}notifs=[];updateBell()}
+  const toLocalInput=d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes())};
+  function openReport(){
+    if(!user){message('Please log in to report surplus');go('#/auth?mode=signin');return}
+    if(user.role!=='kitchen'||!user.org_id){message('Only kitchen accounts can report surplus');return}
+    const f=document.getElementById('reportForm'),now=new Date();
+    f.elements.prepared.value=toLocalInput(new Date(now.getTime()-15*60000));
+    f.elements.pickup.value=toLocalInput(new Date(now.getTime()+90*60000));
+    document.getElementById('reportView').style.display='';document.getElementById('detailView').style.display='none';
+    modal.style.display='grid';
+  }
+  function fillOverview(){
+    const now=Date.now(),av=listingsData.filter(x=>x.status==='Available'),act=listingsData.filter(x=>x.status==='Available'||x.status==='Reserved').sort((a,b)=>a.deadlineTs-b.deadlineTs);
+    const portions=av.reduce((t,x)=>t+x.qty,0),blocked=listingsData.filter(x=>x.status==='Ineligible').length,next=act.find(x=>x.deadlineTs>now),mins=next?Math.max(0,Math.round((next.deadlineTs-now)/60000)):0;
+    const cards=document.querySelector('main .cards');
+    if(cards)cards.innerHTML=`<div class="card"><div class="metric-label">Active listings</div><div class="metric">${av.length}</div><div class="trend">Available for partners now</div></div><div class="card"><div class="metric-label">Portions available</div><div class="metric">${portions} <small style="font-size:13px;font-weight:550">portions</small></div><div class="trend">Eligible and not yet reserved</div></div><div class="card"><div class="metric-label">Blocked by safety checks</div><div class="metric">${blocked}</div><div class="trend" style="color:var(--orange)">Recorded as waste, never offered</div></div><div class="card"><div class="metric-label">Next safe window ends</div><div class="metric" style="font-size:22px">${next?safeText(next.deadline):'—'}</div><div class="trend" style="color:var(--orange)">${next?mins+' min left · '+safeText(next.food):'No active listings'}</div></div>`;
+    const tb=document.getElementById('listings');
+    if(tb)tb.innerHTML=act.length?act.slice(0,6).map(x=>`<tr><td><div class="food">${safeText(x.food)}</div><div class="meta">${safeText(x.source)} · prepared ${safeText(x.prep)}</div></td><td>${x.qty} portions</td><td><span class="pill">✓ ${safeText(x.safety)}</span></td><td>${safeText(x.deadline)}</td><td>${x.partner==='—'?'Unassigned':safeText(x.partner)}</td><td><button class="smallbtn" data-action="detail" data-id="${x.id}">Details</button></td></tr>`).join(''):'<tr><td colspan="6"><div class="empty">No active listings yet. Use “Report surplus” to add one.</div></td></tr>';
+    const soon=act.filter(x=>x.deadlineTs>now).slice(0,3),ac=document.getElementById('attnCount'),ar=document.getElementById('attnRows');
+    if(ac)ac.textContent=soon.length+(soon.length===1?' item':' items');
+    if(ar)ar.innerHTML=soon.length?soon.map(x=>{const m=Math.max(0,Math.round((x.deadlineTs-now)/60000));return `<div class="row"><div><div class="food">${safeText(x.food)}</div><div class="meta">${safeText(x.source)} · ${x.qty} portions · pickup by ${safeText(x.deadline)}</div></div><span class="pill ${m<60?'warn':''}">${m>=60?Math.floor(m/60)+' h '+(m%60)+' min':m+' min'}</span></div>`}).join(''):'<div class="empty">Nothing urgent right now.</div>';
+  }
+  setInterval(()=>{if(current==='dashboard'&&user&&document.getElementById('attnRows'))fillOverview()},30000);
+
   const initials=n=>n.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('')||'U';
   const go=h=>{if(location.hash===h)route();else location.hash=h};
   function parseHash(){const h=location.hash.replace(/^#\/?/,''),[path,qs='']=h.split('?');return{path:path||'home',q:new URLSearchParams(qs)}}
@@ -504,8 +643,9 @@
   function renderNavUser(){
     const el=document.getElementById('tright');
     if(!user){el.innerHTML='<a class="btn" href="#/auth?mode=signin">Log In</a><a class="btn primary" href="#/auth?mode=signup">Sign Up</a>';return}
-    el.innerHTML=`<div class="profile"><div class="avatar">${safeText(initials(user.name))}</div><span class="uname"><b>${safeText(user.name)}</b><small>${safeText(user.org_name||ROLES[user.role]||'Member')}${user.role==='partner'&&user.org_id&&!user.org_verified?' · pending verification':''}</small></span></div><button class="btn" id="logout">Log out</button>`;
-    document.getElementById('logout').onclick=async()=>{try{if(sb)await sb.auth.signOut()}catch(e){}user=null;renderNavUser();message('Logged out — see you soon');go('#/')};
+    el.innerHTML=`<button class="btn" data-action="notifs" aria-label="Notifications" title="Notifications" style="position:relative;padding:8px 11px">🔔<span id="bellCount" style="display:none;position:absolute;top:1px;right:1px;background:var(--red);color:#fff;border-radius:10px;font-size:9px;line-height:1;padding:2px 5px;font-weight:700">0</span></button><div class="profile"><div class="avatar">${safeText(initials(user.name))}</div><span class="uname"><b>${safeText(user.name)}</b><small>${safeText(user.org_name||ROLES[user.role]||'Member')}${user.role==='partner'&&user.org_id&&!user.org_verified?' · pending verification':''}</small></span></div><button class="btn" id="logout">Log out</button>`;
+    updateBell();
+    document.getElementById('logout').onclick=async()=>{stopRealtime();try{if(sb)await sb.auth.signOut()}catch(e){}user=null;listingsData.length=0;renderNavUser();message('Logged out — see you soon');go('#/')};
   }
  
   function overviewFor(){
@@ -516,13 +656,17 @@
     const main=document.querySelector('main');
     if(name==='Overview'){
       main.innerHTML=overviewFor();
-      document.getElementById('openReport').onclick=()=>modal.style.display='grid';
+      document.getElementById('openReport').onclick=()=>openReport();
       document.getElementById('viewAll').onclick=()=>{location.hash='#/listings'};
-      wirePickup();renderForecast();return;
+      fillOverview();renderForecast();return;
     }
-    main.innerHTML=name==='Surplus listings'?listingsPage():name==='Partner network'?partnerPage():impactPage(period);
+    if(name==='Partner network'){
+      main.innerHTML='<div class="empty">Loading the partner network…</div>';
+      loadPartners().then(()=>{if(current==='partners'){main.innerHTML=partnerPage();bindPartners()}});
+      return;
+    }
+    main.innerHTML=name==='Surplus listings'?listingsPage():impactPage(period);
     if(name==='Surplus listings')bindListings();
-    if(name==='Partner network')bindPartners();
     if(name==='Impact')bindImpact();
   }
  
@@ -615,6 +759,7 @@
     const fail=m=>{err.style.color='';err.textContent=m;form.classList.remove('shake');void form.offsetWidth;form.classList.add('shake');btn.disabled=false};
     const done=async()=>{
       await loadUser();renderNavUser();
+      if(user){await loadListings();startRealtime()}
       if(!user)return fail('Signed in, but your profile could not be loaded. Please try again.');
       message('Welcome, '+user.name.split(' ')[0]+'!');
       go(needsOrg(user)?'#/setup':'#/'+(NAMES[next]?next:'dashboard'));
@@ -662,7 +807,7 @@
       btn.disabled=true;
       const{error}=await sb.rpc('create_my_organization',{p_name:name,p_address:address||null,p_capacity:cap});
       if(error){err.textContent=error.message;btn.disabled=false;return}
-      await loadUser();renderNavUser();message('Organisation saved');go('#/dashboard');
+      await loadUser();renderNavUser();if(user){await loadListings();startRealtime()}message('Organisation saved');go('#/dashboard');
     };
   }
 
@@ -717,7 +862,7 @@
     const onListings=fn=>{if(current==='listings')fn();else{if(!user){toPage('listings','Surplus Listings');return}go('#/listings');setTimeout(fn,250)}};
     function handle(raw){
       const t=raw.toLowerCase().replace(/[.,!?]/g,'').trim(),has=r=>r.test(t);let m;
-      if(has(/\b(report|add|create|post)\b.*\b(surplus|food|listing)\b/)){modal.style.display='grid';return say('Opening the report surplus form.')}
+      if(has(/\b(report|add|create|post)\b.*\b(surplus|food|listing)\b/)){openReport();return say('Opening the report surplus form.')}
       if(has(/close|cancel|dismiss/)){modal.style.display='none';return say('Closed.')}
       if(has(/log ?out|sign ?out/)){const b=document.getElementById('logout');if(b){b.click();return}return say('You are not logged in.')}
       if(has(/sign ?up|register|create account/))return toPage('auth?mode=signup','Sign Up');
@@ -739,12 +884,11 @@
     btn.onclick=()=>{if(on){rec.stop();return}try{speechSynthesis.cancel();rec.start();on=true;btn.classList.add('live');show('Listening… try “open Surplus Listings”')}catch(e){}};
   })();
   (async()=>{
-    try{await loadUser()}catch(e){user=null}
+    try{await loadUser();if(user){await loadListings();startRealtime()}}catch(e){user=null}
     renderNavUser();route();
-    if(sb)sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'&&user){user=null;renderNavUser();route()}});
+    if(sb)sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'&&user){stopRealtime();user=null;listingsData.length=0;renderNavUser();route()}});
     setTimeout(()=>document.getElementById('splash').classList.add('done'),400);
   })();
   setTimeout(()=>document.getElementById('splash').classList.add('done'),6000); // safety net if the network is slow
 </script>
 </body></html>
- 
