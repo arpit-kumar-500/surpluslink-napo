@@ -146,6 +146,8 @@
     .asc-form-panel .sub{text-align:center;margin-bottom:16px}
     .asc-form-panel .field{margin-bottom:12px}
     .asc-form-panel input,.asc-form-panel select{width:100%}
+    .asc-form-panel {scrollbar-width: none; -ms-overflow-style: none;}
+    .asc-form-panel::-webkit-scrollbar { display: none;}
     .asc-signup{opacity:0;z-index:1;pointer-events:none}
     .asc-card.asc-active .asc-signin{transform:translateX(100%);opacity:0;pointer-events:none}
     .asc-card.asc-active .asc-signup{transform:translateX(100%);opacity:1;z-index:5;pointer-events:auto;animation:ascShow .6s}
@@ -803,6 +805,9 @@
 
   function renderNavUser(){
     const el=document.getElementById('tright');
+    document.querySelectorAll('.tlinks a').forEach(a => {
+  const hideForStudent = ['dashboard', 'impact', 'partners'].includes(a.dataset.route);
+  a.hidden = !!user && user.role === 'student' && hideForStudent;});
     if(!user){el.innerHTML='<a class="btn" href="#/auth?mode=signin">Log In</a><a class="btn primary" href="#/auth?mode=signup">Sign Up</a>';return}
     el.innerHTML=`<button class="btn" data-action="notifs" aria-label="Notifications" title="Notifications" style="position:relative;padding:8px 11px">🔔<span id="bellCount" style="display:none;position:absolute;top:1px;right:1px;background:var(--red);color:#fff;border-radius:10px;font-size:9px;line-height:1;padding:2px 5px;font-weight:700">0</span></button><div class="profile"><div class="avatar">${safeText(initials(user.name))}</div><span class="uname"><b>${safeText(user.name)}</b><small>${safeText(user.org_name||ROLES[user.role]||'Member')}${user.role==='partner'&&user.org_id&&!user.org_verified?' · pending verification':''}</small></span></div><button class="btn" id="logout">Log out</button>`;
     updateBell();
