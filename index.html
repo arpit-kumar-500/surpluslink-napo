@@ -172,7 +172,7 @@
 <header class="topnav">
   <a class="tbrand" href="#/"><div class="logo">↗</div><span>SurplusLink</span></a>
   <nav class="tlinks">
-    <a href="#/" data-route="home">Home</a><a href="#/dashboard" data-route="dashboard">Dashboard</a><a href="#/listings" data-route="listings">Surplus Listings</a><a href="#/partners" data-route="partners">Partner Network</a><a href="#/impact" data-route="impact">Impact</a><a href="#/about" data-route="about">About</a>
+    <a href="#/" data-route="home">Home</a><a href="#/dashboard" data-route="dashboard">Dashboard</a><a href="#/listings" data-route="listings">Surplus Listings</a><a href="#/partners" data-route="partners">Partner Network</a><a href="#/impact" data-route="impact">Impact</a><a href="#/meals" data-route="meals">My Meals</a><a href="#/about" data-route="about">About</a>
   </nav>
   <div class="tright" id="tright"></div>
 </header>
@@ -187,7 +187,7 @@
       <div class="card"><div class="metric-label">Safe pickup window</div><div class="metric">2 <small style="font-size:13px;font-weight:550">hrs</small></div><div class="trend" style="color:var(--orange)">Next collection closes 8:30 PM</div></div>
     </section>
     <div class="layout">
-      <section class="panel"><div class="panel-top"><div><h3>Demand & surplus forecast</h3><div class="sub">Estimated portions · next 5 service days</div></div><span class="pill warn">Sample forecast</span></div>
+      <section class="panel"><div class="panel-top"><div><h3>Demand & surplus forecast</h3><div class="sub">Estimated portions · next 5 service days</div></div><span class="pill warn" id="forecastBadge">Loading…</span></div>
         <div id="forecastChart" aria-label="Demand and surplus forecast chart"></div>
         <div class="legend"><span><i style="background:#e5a33c"></i>Expected surplus</span><span><i style="background:#287653"></i>Estimated demand</span></div>
         <div class="forecast-info" id="forecastInfo" aria-live="polite">Select a bar for its forecast value.</div>
@@ -312,8 +312,9 @@
  
   function listingsPage(){
     const edible=listingsData.filter(x=>!isOut(x)),waste=listingsData.filter(isOut);
-    return pageShell('Food recovery','Surplus listings','Safe, time-bound handoffs for edible food. Every listing here comes live from the database, and the safety engine decides what is edible.','🥗','<button class="btn primary" id="pageReport">＋ Report surplus</button>',true)
+    return pageShell('Food recovery','Surplus listings','Safe, time-bound handoffs for edible food. Every listing here comes live from the database, and the safety engine decides what is edible.','🥗',user&&user.role==='kitchen'?'<button class="btn primary" id="pageReport">＋ Report surplus</button>':'',true)
     +(user&&user.role==='partner'&&!user.org_verified?'<div class="eligibility no" style="margin-bottom:10px">Your organisation is waiting for admin verification. Surplus listings will appear here once it is approved.</div>':'')
+    +(user&&user.role==='student'?'<div class="eligibility" style="margin-bottom:10px">You\'re browsing what\'s available right now. Reserving food is handled by verified partner organisations.</div>':'')
     +`<div class="filterbar"><input id="listSearch" placeholder="Search food, kitchen, partner…" aria-label="Search listings"><select id="typeFilter"><option value="">All food types</option><option>Meals</option><option>Dairy</option><option>Bakery</option><option>Produce</option><option>Packaged</option></select><select id="sourceFilter"><option value="">All kitchens</option>${[...new Set(listingsData.map(x=>x.source))].sort().map(n=>`<option>${safeText(n)}</option>`).join('')}</select><select id="safetyFilter"><option value="">All safety states</option><option>Eligible to share</option><option>Handoff completed</option></select><select id="sortListings"><option value="deadline">Sort: pickup deadline</option><option value="qty">Sort: quantity</option><option value="food">Sort: food name</option></select></div><div class="tabs" id="listingTabs">${['All active','Available','Reserved','Picked up'].map((x,i)=>`<button class="${i===0?'selected':''}" data-listtab="${x}">${x}</button>`).join('')}</div><div class="sub" id="listCount" style="margin:8px 0">${edible.length} edible listings · every available item has a pickup deadline</div><div class="listing-grid" id="listingGrid">${edible.map(listingCard).join('')}</div><div class="empty" id="listingEmpty" style="display:none">No listings match these filters. Try clearing one.</div><section class="waste-box"><h3>⛔ Waste / ineligible · Do not redistribute</h3><div class="sub">Expired or unverified items are kept out of the edible surplus workflow.</div><div class="listing-grid" id="wasteGrid">${waste.map(listingCard).join('')}</div></section>`;
   }
  
@@ -367,18 +368,59 @@
     return `<section class="chart-panel"><div class="panel-top"><div><h3>${title}</h3><div class="sub">${subtitle} · portions</div></div><span class="chip">Sample data</span></div>${barChart(series,max,legend1,'#287653',legend2,'#e5a33c')}<div class="chart-legend"><span><i style="background:#287653"></i>${legend1}</span><span><i style="background:#e5a33c"></i>${legend2}</span><span>${safeText(note)}</span></div><div class="chart-info" aria-live="polite">Select a bar to inspect its exact value.</div></section>`;
   }
  
-  function impactPage(period='7'){
-    const n=Number(period),P=periodData(n),meals=P.tot.a,waste=P.tot.b,pickups=P.tot.p,kg=(meals*.083).toFixed(1),co2=Math.round(meals*.083*1.35);
-    const pct=Math.round((P.tot.a-P.ptot.a)/P.ptot.a*100),trend=(pct>=0?'↑ ':'↓ ')+Math.abs(pct)+'% vs. previous '+n+' days',rate=(waste/(meals+waste)*100).toFixed(1);
-    const s=P.bars,ca=splitTotal(meals,[.34,.22,.12,.32]),cb=splitTotal(waste,[.30,.34,.10,.26]);
-    const cats=['Rice','Vegetables','Bread','Prepared meals'].map((label,i)=>({label,a:ca[i],b:cb[i]}));
-    const sub=(P.k===1?'Daily totals':P.k+'-day totals (each bar = '+P.k+' days)')+' · '+P.from+'–'+P.to,
-    axisNote='Y: portions per bar · X: '+(P.k===1?'date':'first day of each '+P.k+'-day block')+' · bars sum to '+meals.toLocaleString()+' shared + '+waste.toLocaleString()+' ineligible';
-    const opts=PERIODS.map(d=>'<option value="'+d+'" '+(n===d?'selected':'')+'>Last '+d+' days</option>').join('');
-    return pageShell('Outcomes','Impact','A transparent view of food kept in use, pickups completed, and items kept safely out of redistribution.','🌻','<label class="field" style="width:150px">TIME PERIOD<select id="impactPeriod">'+opts+'</select></label>')
-    +`<div class="cards"><div class="card"><div class="metric-label">Meals redistributed</div><div class="metric">${meals.toLocaleString()}</div><div class="trend">${trend}</div></div><div class="card"><div class="metric-label">Food waste avoided</div><div class="metric">${kg} <small style="font-size:13px">kg</small></div><div class="metric-note">Estimated from ${meals.toLocaleString()} portions × 83 g average</div></div><div class="card"><div class="metric-label">Partner pickups completed</div><div class="metric">${pickups}</div><div class="trend">Across 3 verified partners</div></div><div class="card"><div class="metric-label">Estimated emissions avoided</div><div class="metric">${co2} <small style="font-size:13px">kg CO₂e</small></div><div class="metric-note">Estimate: 1.35 kg CO₂e per kg recovered*</div></div></div><div class="layout" style="margin-top:14px"><div>${chart('Food recovery over time',sub,s,'Redistributed','Ineligible / waste',axisNote)}<div style="height:14px"></div>${chart('Redistribution by food category','Last '+n+' days · category totals equal the cards above',cats,'Shared','Ineligible','Y: portions · X: food category · bars sum to '+meals.toLocaleString()+' shared + '+waste.toLocaleString()+' ineligible')}</div><div><section class="panel"><div class="panel-top"><div><h3>Impact summary</h3><div class="sub">Last ${n} days · sample data</div></div><span class="food-mark">💚</span></div><p style="font-size:13px;line-height:1.6">Campus kitchens shared <b>${meals.toLocaleString()} portions</b> through ${pickups} completed pickups. An estimated <b>${kg} kg</b> of edible food stayed in use. ${waste.toLocaleString()} portions (${rate}%) failed the safety checks, were recorded separately and were never offered to partners.</p><div class="safety-note">*Emissions estimate uses 1.35 kg CO₂e per kg recovered as a demo assumption. Replace with a locally reviewed methodology before reporting real impact.</div></section><section class="panel" style="margin-top:14px"><div class="panel-top"><div><h3>Recent activity</h3><div class="sub">Sample handoff timeline</div></div></div><div class="timeline"><div class="timeline-item"><b>Pickup completed · Fruit cups</b><div>Campus Care · Canteen B · 6:42 PM</div></div><div class="timeline-item"><b>Partner reserved · Dal & steamed rice</b><div>Hope Shelter · Canteen A · 6:10 PM</div></div><div class="timeline-item"><b>Safety hold · Cut melon tray</b><div>Storage unverified; recorded as ineligible · 2:10 PM</div></div><div class="timeline-item"><b>Forecast updated</b><div>Canteen A dinner service · 18 surplus portions predicted</div></div></div></section></div></div><div class="metric-note" style="margin-top:12px">All dashboard metrics, history, and forecasts shown here are sample data for the prototype. Portion and emissions conversions are estimates, not measured outcomes.</div>`;
+  function tinyChart(title,sub,labels,values,color,unit){
+    const max=Math.max(1,...values)*1.15;
+    return `<section class="chart-panel"><div class="panel-top"><div><h3>${title}</h3><div class="sub">${sub}</div></div><span class="chip green">Live data</span></div>
+      <div class="fc"><div class="fc-y">${[4,3,2,1,0].map(n=>`<span style="bottom:${n/4*100}%">${Math.round(max*n/4)}</span>`).join('')}</div>
+      <div class="fc-area">${[4,3,2,1,0].map(n=>`<i class="fc-line" style="bottom:${n/4*100}%"></i>`).join('')}
+        <div class="fc-cols">${values.map((v,i)=>`<div class="fc-col"><button class="fc-bar" data-label="${safeText(labels[i])}" data-kind="${safeText(unit)}" data-value="${v}" style="height:${v/max*100}%;width:70%;background:${color}"><b>${v}</b></button></div>`).join('')}</div></div>
+      <div class="fc-x">${labels.map(l=>`<span>${safeText(l)}</span>`).join('')}</div></div>
+      <div class="chart-info" aria-live="polite">Select a bar to inspect its exact value.</div></section>`;
   }
- 
+  async function loadImpactData(n){
+    const{data,error}=await sb.rpc('impact_daily',{p_days:n});
+    return error?[]:(data||[]);
+  }
+  function fmtDate(iso){const d=new Date(iso+'T00:00:00');return MON[d.getMonth()]+' '+d.getDate()}
+  async function impactPage(period='7'){
+    const n=Number(period),rows=await loadImpactData(n);
+    const meals=rows.reduce((t,r)=>t+r.portions_shared,0),kg=rows.reduce((t,r)=>t+Number(r.kg_shared),0),
+          pickups=rows.reduce((t,r)=>t+r.pickups,0),wasteKg=rows.reduce((t,r)=>t+Number(r.waste_kg),0),
+          blocked=rows.reduce((t,r)=>t+r.blocked,0),co2=Math.round(kg*2.5);
+    const half=Math.floor(rows.length/2),prevMeals=rows.slice(0,half).reduce((t,r)=>t+r.portions_shared,0),
+          recentMeals=rows.slice(half).reduce((t,r)=>t+r.portions_shared,0),
+          pct=prevMeals>0?Math.round((recentMeals-prevMeals)/prevMeals*100):null,
+          trend=pct===null?'No prior-period data yet':((pct>=0?'↑ ':'↓ ')+Math.abs(pct)+'% vs. the first half of this period');
+    const opts=PERIODS.map(d=>'<option value="'+d+'" '+(n===d?'selected':'')+'>Last '+d+' days</option>').join('');
+    const labels=rows.map(r=>fmtDate(r.on_date));
+    const chart1=tinyChart('Portions shared per day','Live totals from completed pickups',labels,rows.map(r=>r.portions_shared),'#287653','portions');
+    const chart2=tinyChart('Food blocked by the safety engine','Items routed to waste, never offered to a partner',labels,rows.map(r=>r.blocked),'#e5a33c','items');
+    return pageShell('Outcomes','Impact','Every number on this page is computed live from the database: real pickups, real weights, real safety blocks.','🌻','<label class="field" style="width:150px">TIME PERIOD<select id="impactPeriod">'+opts+'</select></label>',true)
+    +`<div class="cards"><div class="card"><div class="metric-label">Portions redistributed</div><div class="metric">${meals.toLocaleString()}</div><div class="trend">${trend}</div></div><div class="card"><div class="metric-label">Food kept in use</div><div class="metric">${kg.toFixed(1)} <small style="font-size:13px">kg</small></div><div class="metric-note">Sum of each listing's actual weight at pickup</div></div><div class="card"><div class="metric-label">Pickups completed</div><div class="metric">${pickups}</div><div class="trend">Confirmed with a pickup code</div></div><div class="card"><div class="metric-label">Items blocked by safety checks</div><div class="metric">${blocked}</div><div class="trend" style="color:var(--orange)">${wasteKg.toFixed(1)} kg recorded as waste</div></div></div>
+    <div class="layout" style="margin-top:14px"><div>${chart1}<div style="height:14px"></div>${chart2}</div>
+    <div><section class="panel"><div class="panel-top"><div><h3>Impact summary</h3><div class="sub">Last ${n} days · live data</div></div><span class="food-mark">💚</span></div><p style="font-size:13px;line-height:1.6">Campus kitchens shared <b>${meals.toLocaleString()} portions</b> (${kg.toFixed(1)} kg) through <b>${pickups} completed pickups</b>, each confirmed with a pickup code. ${blocked} item(s) failed the safety checks and were recorded as waste instead.</p><div class="safety-note">Estimated emissions avoided: <b>${co2} kg CO₂e</b>. Based on FAO's estimate that global food wastage causes roughly 3.3 billion tonnes of CO₂-equivalent emissions from about 1.3 billion tonnes of wasted food — about 2.5 kg CO₂e per kg (FAO, <i>Food Wastage Footprint</i>, 2013). This is a global average, not a campus-specific or India-specific measurement.</div></section>
+    <section class="panel" style="margin-top:14px"><div class="panel-top"><div><h3>Forecast accuracy</h3><div class="sub">How close the model's predictions have been</div></div></div><div id="accuracyBox" class="sub">Loading…</div></section></div></div>`;
+  }
+  async function bindImpact(){
+    document.getElementById('impactPeriod').onchange=async e=>{const main=document.querySelector('main');main.innerHTML=await impactPage(e.target.value);bindImpact()};
+    document.querySelectorAll('.chart-panel').forEach(panel=>panel.addEventListener('click',e=>{
+      const bar=e.target.closest('.fc-bar');if(!bar)return;
+      panel.querySelectorAll('.fc-bar').forEach(x=>x.classList.remove('selected'));
+      bar.classList.add('selected');
+      panel.querySelector('.chart-info').textContent=`${bar.dataset.label} · ${bar.dataset.kind}: ${bar.dataset.value}`;
+    }));
+    const box=document.getElementById('accuracyBox');
+    if(box&&sb&&user&&user.role==='kitchen'&&user.org_id){
+      const{data,error}=await sb.rpc('forecast_accuracy',{p_days:14});
+      if(error||!data||!data.length){box.textContent='Not enough history yet to measure accuracy.'}
+      else{
+        const simAvg=Math.round(100*data.reduce((t,a)=>t+Number(a.simulated_share||0),0)/data.length);
+        box.innerHTML=data.map(a=>`<div class="row"><div><div class="food">${MEAL_LABEL[a.meal]||a.meal}</div><div class="meta">${a.days_tested} day(s) tested</div></div><div class="row-right"><b>±${a.mae} portions</b><div class="meta">${a.mape_pct}% average error</div></div></div>`).join('')
+          +`<div class="metric-note" style="margin-top:8px">${simAvg}% of this test used simulated history. Accuracy will reflect real operations as kitchens log real meals.</div>`;
+      }
+    }else if(box){box.textContent='Sign in with a kitchen account to see its forecast accuracy.'}
+  }
+
   function bindListings(){
     const grid=document.getElementById('listingGrid');if(!grid)return;
     let tab='All active';
@@ -393,7 +435,7 @@
     };
     ['listSearch','typeFilter','sourceFilter','safetyFilter','sortListings'].forEach(id=>document.getElementById(id).addEventListener('input',apply));
     document.querySelectorAll('[data-listtab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-listtab]').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');tab=b.dataset.listtab;apply()});
-    document.getElementById('pageReport').onclick=()=>openReport();
+    const pr=document.getElementById('pageReport');if(pr)pr.onclick=()=>openReport();
     window.refreshListingsView=apply;
     apply();
   }
@@ -487,42 +529,56 @@
     }
   });
 
-  function renderForecast(){
-    const data=[['Mon',280,42],['Tue',305,51],['Wed',250,36],['Thu',330,58],['Fri',290,47]],max=400,chart=document.getElementById('forecastChart');
+  const MEAL_LABEL={lunch:'Lunch',dinner:'Dinner',breakfast:'Breakfast',snacks:'Snacks'};
+  const dayShort=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T00:00:00').getDay()];
+  async function renderForecast(){
+    const chart=document.getElementById('forecastChart'),badge=document.getElementById('forecastBadge'),info=document.getElementById('forecastInfo');
     if(!chart)return;
-    const ticks=[400,300,200,100,0];
-    chart.innerHTML=`<div class="fc">
-      <div class="fc-y">${ticks.map(t=>`<span style="bottom:${t/max*100}%">${t}</span>`).join('')}</div>
-      <div class="fc-area">
-        ${ticks.map(t=>`<i class="fc-line" style="bottom:${t/max*100}%"></i>`).join('')}
-        <div class="fc-cols">${data.map(([day,demand,surplus])=>`
-          <div class="fc-col">
-            <button class="fc-bar" data-day="${day}" data-kind="Expected surplus" data-value="${surplus}" aria-label="${day}, expected surplus: ${surplus} portions" style="height:${surplus/max*100}%;background:#e5a33c"><b>${surplus}</b></button>
-            <button class="fc-bar" data-day="${day}" data-kind="Estimated demand" data-value="${demand}" aria-label="${day}, estimated demand: ${demand} portions" style="height:${demand/max*100}%;background:#287653"><b>${demand}</b></button>
-          </div>`).join('')}</div>
-      </div>
-      <div class="fc-x">${data.map(d=>`<span>${d[0]}</span>`).join('')}</div>
-    </div>`;
-    chart.onclick=e=>{const b=e.target.closest('.fc-bar');if(b)document.getElementById('forecastInfo').textContent=`${b.dataset.day} · ${b.dataset.kind}: ${b.dataset.value} portions`};
+    if(!sb||!user||user.role!=='kitchen'||!user.org_id){
+      chart.innerHTML='<div class="empty">Forecasts are available once a kitchen account reports meals.</div>';
+      if(badge){badge.textContent='No forecast';badge.className='pill'}
+      return;
+    }
+    await sb.rpc('generate_forecasts',{p_days:5});
+    const{data,error}=await sb.from('forecasts').select('forecast_date,meal_type,predicted_demand,predicted_surplus,recommended_cook,rsvp_skips,history_points,simulated_share').eq('model_version','baseline-v1').order('forecast_date').limit(20);
+    if(error||!data||!data.length){
+      chart.innerHTML='<div class="empty">Not enough meal history yet. Log a few meals on the My Meals page to unlock the forecast.</div>';
+      if(badge){badge.textContent='No forecast yet';badge.className='pill'}
+      if(info)info.textContent='';
+      return;
+    }
+    const byDay={};
+    data.forEach(r=>{(byDay[r.forecast_date]=byDay[r.forecast_date]||[]).push(r)});
+    const days=Object.keys(byDay).sort().slice(0,5);
+    const sums=days.map(d=>{const rows=byDay[d];return{day:d,demand:rows.reduce((t,r)=>t+Number(r.predicted_demand),0),surplus:rows.reduce((t,r)=>t+Number(r.predicted_surplus),0),rows}});
+    const max=Math.max(1,...sums.flatMap(s=>[s.demand,s.surplus]))*1.15;
+    chart.dataset.sums=JSON.stringify(sums);
+    chart.innerHTML=`<div class="fc"><div class="fc-y">${[4,3,2,1,0].map(n=>`<span style="bottom:${n/4*100}%">${Math.round(max*n/4)}</span>`).join('')}</div>
+      <div class="fc-area">${[4,3,2,1,0].map(n=>`<i class="fc-line" style="bottom:${n/4*100}%"></i>`).join('')}
+        <div class="fc-cols">${sums.map((s,i)=>`<div class="fc-col">
+            <button class="fc-bar" data-i="${i}" data-kind="Expected surplus" data-value="${s.surplus}" aria-label="${dayShort(s.day)}, expected surplus: ${s.surplus} portions" style="height:${s.surplus/max*100}%;background:#e5a33c"><b>${s.surplus}</b></button>
+            <button class="fc-bar" data-i="${i}" data-kind="Predicted demand" data-value="${s.demand}" aria-label="${dayShort(s.day)}, predicted demand: ${s.demand} portions" style="height:${s.demand/max*100}%;background:#287653"><b>${s.demand}</b></button>
+          </div>`).join('')}</div></div>
+      <div class="fc-x">${sums.map(s=>`<span>${dayShort(s.day)}</span>`).join('')}</div></div>`;
+    chart.onclick=e=>{const b=e.target.closest('.fc-bar');if(!b||!info)return;const s=sums[Number(b.dataset.i)];info.textContent=`${dayShort(s.day)} · ${b.dataset.kind}: ${b.dataset.value} portions`};
+    const today=sums[0],skips=today.rows.reduce((t,r)=>t+r.rsvp_skips,0),cook=Math.round(today.rows.reduce((t,r)=>t+Number(r.recommended_cook),0));
+    if(info)info.textContent=`Today: cook about ${cook} portions across meals`+(skips?` (${skips} students marked skipping)`:'')+'. Select a bar for its exact value.';
+    const sim=Math.round(100*(today.rows.reduce((t,r)=>t+(r.simulated_share||0),0)/today.rows.length));
+    if(badge){
+      const{data:acc}=await sb.rpc('forecast_accuracy',{p_days:14});
+      const avgMae=acc&&acc.length?Math.round(acc.reduce((t,a)=>t+Number(a.mae),0)/acc.length):null;
+      badge.textContent=(avgMae!=null?'±'+avgMae+' portions · ':'')+(sim>0?sim+'% simulated history':'Real history');
+      badge.className='pill'+(sim>50?' warn':'');
+    }
   }
- 
-  function bindImpact(){
-    document.getElementById('impactPeriod').onchange=e=>renderPage('Impact',e.target.value);
-    document.querySelectorAll('.chart-panel').forEach(panel=>panel.addEventListener('click',e=>{
-      const bar=e.target.closest('.fc-bar');if(!bar)return;
-      panel.querySelectorAll('.fc-bar').forEach(x=>x.classList.remove('selected'));
-      bar.classList.add('selected');
-      panel.querySelector('.chart-info').textContent=`${bar.dataset.label} · ${bar.dataset.kind}: ${bar.dataset.value} portions`;
-    }));
-  }
- 
+
   // renderPage() and the router are defined at the end of this script.
  
  
   /* ===================== Gateway: router, auth, pages ===================== */
   const NAMES={dashboard:'Overview',listings:'Surplus listings',partners:'Partner network',impact:'Impact'};
-  const TITLES={home:'Home',dashboard:'Dashboard',listings:'Surplus Listings',partners:'Partner Network',impact:'Impact',about:'About',auth:'Log In',setup:'Setup',terms:'Terms',privacy:'Privacy'};
-  const ROLES={kitchen:'Campus kitchen',partner:'Partner organisation',volunteer:'Volunteer',admin:'Administrator'};
+  const TITLES={home:'Home',dashboard:'Dashboard',listings:'Surplus Listings',partners:'Partner Network',impact:'Impact',about:'About',auth:'Log In',setup:'Setup',meals:'My Meals',terms:'Terms',privacy:'Privacy'};
+  const ROLES={kitchen:'Campus kitchen',partner:'Partner organisation',student:'Student',volunteer:'Volunteer',admin:'Administrator'};
   let current='home',user=null;const mem={};
   const store={get(k){try{return localStorage.getItem(k)}catch(e){return mem[k]??null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){mem[k]=v}},del(k){try{localStorage.removeItem(k)}catch(e){delete mem[k]}}};
   /* ===== Supabase (real backend) =====
@@ -640,6 +696,67 @@
   const go=h=>{if(location.hash===h)route();else location.hash=h};
   function parseHash(){const h=location.hash.replace(/^#\/?/,''),[path,qs='']=h.split('?');return{path:path||'home',q:new URLSearchParams(qs)}}
  
+  /* ===== My Meals: student RSVPs + kitchen meal logging ===== */
+  function mealRow(mt,label){return `<div class="row"><div><div class="food">${label}</div><div class="meta">Tomorrow</div></div><div style="display:flex;gap:6px"><button class="smallbtn" data-mealbtn="${mt}" data-will="true">I'll eat</button><button class="smallbtn" data-mealbtn="${mt}" data-will="false">Skipping</button></div></div>`}
+  async function loadMealsPage(){
+    const main=document.querySelector('main');
+    if(user.role==='student'){
+      const{data:kitchens}=await sb.from('organizations').select('id,name').eq('type','kitchen').order('name');
+      const tomorrow=new Date(Date.now()+86400000).toISOString().slice(0,10);
+      main.innerHTML=pageShell('Plan ahead','My Meals','Tell your campus kitchen if you will eat tomorrow. Every “skipping” tap helps it cook the right amount and cuts surplus.','🍽️','',true)
+        +`<section class="panel"><div class="panel-top"><div><h3>Tomorrow's meals</h3><div class="sub">${tomorrow}</div></div></div>
+          ${kitchens&&kitchens.length?`<label class="field" style="max-width:320px;margin-bottom:12px">Kitchen<select id="mealKitchen">${kitchens.map(k=>`<option value="${k.id}">${safeText(k.name)}</option>`).join('')}</select></label>
+          <div id="mealRows">${mealRow('lunch','Lunch')}${mealRow('dinner','Dinner')}</div>
+          <div class="sub" id="mealStatus" style="margin-top:10px"></div>`:'<div class="empty">No campus kitchen has signed up yet.</div>'}
+        </section>`;
+      const kSel=document.getElementById('mealKitchen');
+      async function refreshMine(){
+        if(!kSel)return;
+        const{data}=await sb.from('rsvps').select('meal_type,will_eat').eq('kitchen_id',kSel.value).eq('rsvp_date',tomorrow);
+        document.querySelectorAll('[data-mealbtn]').forEach(b=>b.classList.remove('selected'));
+        (data||[]).forEach(r=>{const b=document.querySelector(`[data-mealbtn="${r.meal_type}"][data-will="${r.will_eat}"]`);if(b)b.classList.add('selected')});
+      }
+      if(kSel)kSel.onchange=refreshMine;
+      document.querySelectorAll('[data-mealbtn]').forEach(b=>b.onclick=async()=>{
+        if(!kSel)return;
+        const{error}=await sb.from('rsvps').upsert({user_id:user.id,kitchen_id:kSel.value,rsvp_date:tomorrow,meal_type:b.dataset.mealbtn,will_eat:b.dataset.will==='true'},{onConflict:'user_id,kitchen_id,rsvp_date,meal_type'});
+        const st=document.getElementById('mealStatus');
+        if(error){if(st)st.textContent='Could not save: '+error.message;return}
+        if(st)st.textContent='Saved — thank you!';
+        refreshMine();
+      });
+      refreshMine();
+    }else if(user.role==='kitchen'&&user.org_id){
+      const today=new Date().toISOString().slice(0,10);
+      main.innerHTML=pageShell('Operations','My Meals','Log what your kitchen actually prepared and served. This is the real data the forecast learns from.','🍽️','',true)
+        +`<section class="panel"><h3>Log a meal</h3><div class="sub" style="margin-bottom:12px">One entry per meal per day. Logging again for the same meal updates it.</div>
+          <form id="mealLogForm"><div class="form">
+            <label class="field">Date<input name="log_date" type="date" value="${today}" max="${today}"></label>
+            <label class="field">Meal<select name="meal_type"><option value="breakfast">Breakfast</option><option value="lunch" selected>Lunch</option><option value="dinner">Dinner</option><option value="snacks">Snacks</option></select></label>
+            <label class="field">Portions prepared<input name="prepared" type="number" min="0" required></label>
+            <label class="field">Portions served<input name="served" type="number" min="0" required></label>
+          </div><div class="auth-err" id="mealErr" role="alert"></div><button class="btn primary" type="submit" style="margin-top:10px">Save meal log</button></form></section>
+        <section class="panel" style="margin-top:14px"><div class="panel-top"><div><h3>Recent logs</h3></div><button class="btn" id="refreshForecastBtn">Recalculate forecast</button></div><div id="mealLogRows"><div class="empty">Loading…</div></div></section>`;
+      async function loadLogs(){
+        const{data}=await sb.from('meal_logs').select('log_date,meal_type,prepared,served,leftover,is_simulated').eq('kitchen_id',user.org_id).order('log_date',{ascending:false}).limit(10);
+        const box=document.getElementById('mealLogRows');if(!box)return;
+        box.innerHTML=(data&&data.length)?data.map(r=>`<div class="row"><div><div class="food">${fmtDate(r.log_date)} · ${MEAL_LABEL[r.meal_type]||r.meal_type}${r.is_simulated?' <span class=\"chip yellow\">Simulated</span>':''}</div><div class="meta">Prepared ${r.prepared} · Served ${r.served} · Leftover ${r.leftover}</div></div></div>`).join(''):'<div class="empty">No logs yet.</div>';
+      }
+      document.getElementById('mealLogForm').onsubmit=async e=>{
+        e.preventDefault();const f=new FormData(e.target),err=document.getElementById('mealErr');err.textContent='';
+        const prepared=Number(f.get('prepared')),served=Number(f.get('served'));
+        if(served>prepared){err.textContent='Served cannot be more than prepared.';return}
+        const{error}=await sb.from('meal_logs').upsert({kitchen_id:user.org_id,log_date:f.get('log_date'),meal_type:f.get('meal_type'),prepared,served,leftover:prepared-served,is_simulated:false},{onConflict:'kitchen_id,log_date,meal_type'});
+        if(error){err.textContent=error.message;return}
+        message('Meal log saved');await loadLogs();
+      };
+      document.getElementById('refreshForecastBtn').onclick=async()=>{await sb.rpc('generate_forecasts',{p_days:5});message('Forecast recalculated — check the Dashboard')};
+      loadLogs();
+    }else{
+      main.innerHTML=pageShell('Plan ahead','My Meals','RSVPs are for students, and meal logging is for campus kitchens.','🍽️')+'<div class="empty">This account type does not use My Meals.</div>';
+    }
+  }
+
   function renderNavUser(){
     const el=document.getElementById('tright');
     if(!user){el.innerHTML='<a class="btn" href="#/auth?mode=signin">Log In</a><a class="btn primary" href="#/auth?mode=signup">Sign Up</a>';return}
@@ -665,9 +782,13 @@
       loadPartners().then(()=>{if(current==='partners'){main.innerHTML=partnerPage();bindPartners()}});
       return;
     }
-    main.innerHTML=name==='Surplus listings'?listingsPage():impactPage(period);
-    if(name==='Surplus listings')bindListings();
-    if(name==='Impact')bindImpact();
+    if(name==='Impact'){
+      main.innerHTML='<div class="empty">Loading impact data…</div>';
+      impactPage(period).then(html=>{if(current==='impact'){main.innerHTML=html;bindImpact()}});
+      return;
+    }
+    main.innerHTML=listingsPage();
+    bindListings();
   }
  
   function homePage(){
@@ -694,40 +815,41 @@
     return `<div class="eyebrow">ABOUT</div><div class="page-intro"><div><h2>Moving good food to the people who need it</h2><p>SurplusLink is a campus food-recovery prototype: forecast, check, match, hand off.</p></div><div class="food-mark">🌻</div></div><div class="feat-grid">${f.map(x=>`<div class="card feat"><div class="ico">${x[0]}</div><h3>${x[1]}</h3><p>${x[2]}</p></div>`).join('')}</div><h2 class="sec-title">Meet the creators</h2><div class="team">${[1,2,3,4].map(i=>`<div class="card"><div class="avatar">${i}</div><b>Creator name</b><div class="meta">Role · edit in aboutPage()</div></div>`).join('')}</div>`;
   }
   function legalPage(k){
-    const L={
+const L={
     terms:{title:'Terms of Use',icon:'📜',blurb:'The ground rules for using SurplusLink, written in plain language. Please read them before you list, reserve or collect any food.',
-      key:[['🧪','Prototype only','SurplusLink is a student prototype. All listings, partners and figures are sample data.'],['⏱️','2-hour safety rule','Food must be collected within a conservative 2-hour window and stored safely.'],['⚖️','Not legal advice','Always follow your local food-safety regulations before any real handoff.']],
+      key:[['🧪','Working prototype','SurplusLink runs on a real database (Supabase/Postgres). Listings you create are real; organisations and figures not clearly marked “simulated” are real too.'],['⏱️','Sourced safety limits','Storage limits follow FSSAI where FSSAI sets a number, and the internationally recognised 2-hour food-safety rule everywhere FSSAI does not. See “Food safety obligations” below.'],['⚖️','Not legal advice','Always follow your local food-safety regulations before any real handoff.']],
       secs:[
        {i:'🎯',t:'Acceptance of these terms',p:['By creating an account, logging in or simply browsing SurplusLink, you agree to these Terms of Use. If you do not agree, please do not use the platform.','We may update these terms as the project grows. The “Last updated” date above always shows the current version, and continued use after a change means you accept it.']},
-       {i:'🌱',t:'What SurplusLink does',p:['SurplusLink is a campus food-recovery prototype. It helps kitchens estimate leftover food, run a safety check, and match edible surplus with verified partner organisations before the pickup window closes.'],l:['Forecast demand and surplus for campus kitchens','Validate preparation time, storage and pickup deadlines','Match safe surplus with partners that have capacity','Record handoffs and show transparent impact figures'],n:['g','SurplusLink coordinates information only. It does not cook, store, transport or inspect food.']},
-       {i:'👤',t:'Accounts and eligibility',p:['You can sign up as a campus kitchen or coordinator, or as a partner organisation. You are responsible for keeping your login details private and for everything done through your account.'],l:['Provide a real name and a valid email address','Use a password of at least 8 characters, and never reuse a real password in this prototype','Tell us if you think someone else is using your account','One person should not operate several accounts to bypass checks']},
-       {i:'🛡️',t:'Food safety obligations',p:['Safety comes first. Every listing needs a preparation time, a storage status and a pickup deadline before partners can see it.'],l:['Food kept hot must stay at 60°C or above; chilled food at 5°C or below','Food with unknown or room-temperature storage is routed to waste and is never offered','Pickup must happen inside the 2-hour window used by this prototype','Allergen notes must be as complete and honest as you can make them','Expired, damaged or doubtful items must not be redistributed'],n:['w','The 2-hour rule is a conservative demo assumption. It is not legal, medical or food-safety advice, and it does not replace local regulations.']},
-       {i:'🍲',t:'Kitchen and partner responsibilities',p:['Kitchens must report accurate quantities, times and storage conditions. Partners must collect on time, handle food hygienically and tell us quickly if they cannot collect.','Both sides agree to treat each other respectfully, to cancel reservations as early as possible, and to keep pickup records truthful.']},
-       {i:'🚫',t:'Prohibited use',p:['You may not use SurplusLink to:'],l:['Offer food that you know, or suspect, is unsafe or ineligible','Enter false times, temperatures, quantities or allergen details','Impersonate another person, kitchen or organisation','Attempt to break, scrape or overload the service','Use the platform for advertising, harassment or anything unlawful']},
-       {i:'📊',t:'Data, forecasts and impact figures',p:['Forecasts, partner capacities, pickups, waste-avoided and emissions figures are sample data or estimates. Portion-to-weight (83 g) and emissions (1.35 kg CO₂e per kg) conversions are demo assumptions.','Please do not quote these numbers as measured outcomes until they are replaced with verified records and a reviewed methodology.']},
-       {i:'🧠',t:'Intellectual property',p:['The SurplusLink name, design and code belong to Team SurplusLink. You may view and use the prototype for evaluation and learning. Content you add, such as food names and notes, remains yours, and you allow us to display it inside the service.']},
-       {i:'⚠️',t:'Disclaimers and limits of liability',p:['The prototype is provided “as is”, without promises of accuracy, availability or fitness for a particular purpose. To the fullest extent allowed by law, Team SurplusLink is not liable for loss, illness or damage arising from food shared, or not shared, through the prototype.','Nothing in these terms limits any right you have under applicable consumer or safety law.']},
-       {i:'🔒',t:'Suspension and termination',p:['We may suspend or remove accounts that break these terms or put people at risk. You can stop using SurplusLink at any time by logging out and clearing your browser data, which removes accounts created in this prototype.']},
+       {i:'🌱',t:'What SurplusLink does',p:['SurplusLink is a campus food-recovery platform, currently operated as a student project. It helps kitchens estimate leftover food, runs a database-level safety check on every listing, and matches edible surplus with verified partner organisations before the pickup window closes.'],l:['Forecast demand and surplus for campus kitchens from their own meal records','Validate preparation time, storage and pickup deadlines automatically','Match safe surplus with verified partners that have capacity','Record handoffs with a one-time pickup code and show transparent impact figures'],n:['g','SurplusLink coordinates information only. It does not cook, store, transport or inspect food.']},
+       {i:'👤',t:'Accounts and roles',p:['You can sign up as a campus kitchen, a partner organisation, or a student. Kitchens and partners additionally register an organisation, which an admin may verify before it can be fully active. You are responsible for keeping your login details private and for everything done through your account.'],l:['Provide a real name and a valid email address','Use a password of at least 8 characters','Tell us if you think someone else is using your account','One person should not operate several accounts to bypass checks or verification']},
+       {i:'🛡️',t:'Food safety obligations',p:['Safety comes first. Every listing needs a preparation time, a storage status and a pickup deadline, and the platform\'s database — not the person reporting it — decides whether it is eligible before any partner can see it.'],l:['Hot-held food must stay at 60°C or above; chilled food at 7°C or below (the chilled figure follows FSSAI\'s own regulation for surplus food storage)','Hot-held cooked food must be collected within 2 hours of preparation, following the internationally recognised food-safety “danger zone” rule for food held between 5°C and 60°C','Food with unknown storage is routed to waste and is never offered to a partner','Packaged food must carry a use-by date and is blocked once that date passes, as required by FSSAI\'s surplus-food regulations','Allergen notes must be as complete and honest as you can make them','Expired, withdrawn or rejected items must never be redistributed, regardless of what any user believes about their safety'],n:['w','These limits reflect our best reading of FSSAI\'s Recovery and Distribution of Surplus Food Regulations, 2019 and widely used international food-safety guidance. They are not a substitute for professional food-safety advice, and any organisation using this platform for real handoffs should have its own food-safety review.']},
+       {i:'🍲',t:'Kitchen and partner responsibilities',p:['Kitchens must report accurate quantities, times and storage conditions, and must log real meal data if they want accurate forecasts. Partners must collect only what they have capacity and approval for, handle food hygienically, and use the pickup code only at the point of collection.','Both sides agree to treat each other respectfully, to cancel reservations as early as possible, and to keep records truthful — the platform keeps an audit trail of every listing\'s history.']},
+       {i:'🚫',t:'Prohibited use',p:['You may not use SurplusLink to:'],l:['Offer food that you know, or suspect, is unsafe or ineligible, or try to bypass the safety check','Enter false times, temperatures, quantities, allergen details or meal logs','Impersonate another person, kitchen or organisation, or create an organisation you do not represent','Share a pickup code with anyone other than the kitchen at the point of collection','Attempt to break, scrape or overload the service','Use the platform for advertising, harassment or anything unlawful']},
+       {i:'📊',t:'Data, forecasts and impact figures',p:['Impact figures (portions shared, kg recovered, pickups completed) are computed live from real database records once they exist, and the page tells you what share of any forecast\'s history is still simulated. The weight-per-portion a kitchen enters, and the estimate of 2.5 kg CO₂e avoided per kg of food recovered (a widely cited global average, not a campus-specific measurement), are the two figures to treat as estimates rather than measurements.','Forecasts are generated from each kitchen\'s own logged meal data using a transparent day-of-week model; where little or no real history exists yet, clearly labelled simulated history is used so the feature can be demonstrated honestly.']},
+       {i:'🧠',t:'Intellectual property',p:['The SurplusLink name, design and code belong to Team SurplusLink. You may view and use the platform for evaluation, learning and campus operation. Content you add, such as food names and notes, remains yours, and you allow us to display it inside the service.']},
+       {i:'⚠️',t:'Disclaimers and limits of liability',p:['The platform is provided “as is”, without promises of accuracy, availability or fitness for a particular purpose. To the fullest extent allowed by law, Team SurplusLink is not liable for loss, illness or damage arising from food shared, or not shared, through the platform.','Nothing in these terms limits any right you have under applicable consumer or safety law.']},
+       {i:'🔒',t:'Suspension, termination and deleting your account',p:['We may suspend or remove accounts that break these terms or put people at risk. To close your account and have your personal data deleted, use the contact details below — because accounts now live in a real database, this is not something clearing your browser can do on its own.']},
        {i:'🏛️',t:'Governing law and disputes',p:['These terms are meant to be read under the laws of India. We encourage you to contact us first so we can try to resolve any concern informally and quickly.']},
-       {i:'✉️',t:'Contact us',p:['Questions about these terms? Write to you@example.com and we will reply as soon as we can. Replace this address with your team’s real contact before launch.']}],
-      faq:[['Can I use SurplusLink for real food handoffs?','Not yet. It is a prototype and has not been reviewed against local food-safety requirements.'],['Why is the pickup window only 2 hours?','It is a deliberately cautious demo rule so that nothing risky is ever listed as shareable.'],['Who is responsible for food safety?','The kitchen that prepares the food and the partner that collects it are responsible, following local law.'],['Are the numbers on the Impact page real?','They are sample data. Each figure is computed from one shared sample dataset so charts and cards always agree.']]},
-    privacy:{title:'Privacy Policy',icon:'🔐',blurb:'How SurplusLink handles information. Short version: this prototype keeps your data in your own browser and sends nothing to a server.',
-      key:[['💾','Stored in your browser','Accounts and sessions live in your browser’s local storage only.'],['🚫','No tracking','No analytics, advertising cookies or third-party trackers are used.'],['🧹','You are in control','Log out or clear browser data and everything created here is gone.']],
+       {i:'✉️',t:'Contact us',p:['Questions about these terms? Write to you@example.com and we will reply as soon as we can. Replace this address with your team\'s real contact before launch.']}],
+      faq:[['Can I use SurplusLink for real food handoffs?','The platform itself is real and functioning. Whether it\'s appropriate for your organisation\'s real handoffs depends on your own food-safety review — we haven\'t had this reviewed by a food-safety authority.'],['Why must hot food be collected within 2 hours?','It follows the internationally recognised food-safety rule for food held in the 5-60°C temperature danger zone, applied conservatively since the people collecting it may not reheat it before eating.'],['Who is responsible for food safety?','The kitchen that prepares the food and the partner that collects it are responsible, following local law. The platform\'s safety engine blocks what it can detect, but it cannot inspect food in person.'],['Are the numbers on the Impact page real?','They are computed live from real pickups once they exist. The page shows what share of the forecast is still based on simulated history, since few kitchens have logged weeks of real meal data yet.']]},
+    privacy:{title:'Privacy Policy',icon:'🔐',blurb:'How SurplusLink handles information. Short version: your account lives in a real database (Supabase), access is restricted by your role, and we collect no more than the platform needs to work.',
+      key:[['🗄️','Stored in a real database','Accounts, listings, reservations and meal logs are stored in Supabase (Postgres), not only in your browser.'],['🔑','Access is restricted by role','Database rules (Row Level Security) mean a kitchen can only see its own data, a partner only its own reservations, and so on — enforced by the database itself, not just the screen.'],['🚫','No tracking','No analytics, advertising cookies or third-party trackers are used.']],
       secs:[
-       {i:'👋',t:'Our approach to privacy',p:['SurplusLink is a student prototype built to show how campus food recovery could work. We collect as little information as possible, and we explain exactly what is stored and why.']},
-       {i:'🗂️',t:'What we store',p:['When you create an account the following is saved on your own device:'],l:['Your full name and email address','Your role (campus kitchen or partner organisation)','A scrambled version of your password, used only to let you log in again','A session record that keeps you logged in until you log out','Surplus listings you add during a visit, which exist in memory and disappear on refresh'],n:['w','The password scrambling in this demo is not real security. Please never use a password you use anywhere else.']},
-       {i:'🎯',t:'Why we use it',p:['Your information is used only to personalise the demo, such as greeting you by name and showing the correct dashboard. It is not used for profiling, marketing or decision-making about you.']},
-       {i:'🖥️',t:'Where data lives',p:['Everything is saved in your browser’s local storage on your own device. There is no SurplusLink server or database in this prototype, so we cannot see, copy or recover your data.'],n:['g','Because nothing is uploaded, using a different browser or device means starting with a fresh, empty prototype.']},
-       {i:'🍪',t:'Cookies and tracking',p:['SurplusLink does not set advertising or analytics cookies and does not use tracking pixels, fingerprinting or social-media trackers. Local storage is used only for the account and session details described above.']},
-       {i:'🤝',t:'Sharing with others',p:['We do not sell, rent or share your information. Because no data reaches us, there is nothing to pass to third parties. Partner and kitchen details shown in the prototype are fictional sample records.']},
-       {i:'⏳',t:'How long data is kept',p:['Local data stays until you remove it. Logging out ends your session, and clearing your browser’s site data deletes all accounts, sessions and settings created by this prototype.']},
-       {i:'🛠️',t:'Your choices and rights',p:['You stay in charge of your information:'],l:['See what is stored using your browser’s developer tools (Application → Local storage)','Delete your data by clearing site data for this page','Log out at any time using the button in the top bar','Ask us any privacy question using the contact below'],n:['g','If this project becomes a live service, we will add formal access, correction and deletion requests that follow applicable Indian data-protection law.']},
-       {i:'🔐',t:'Security',p:['Data never leaves your device, which limits exposure, but anyone with access to your browser profile could read it. Use a trusted device and log out on shared computers.']},
-       {i:'🧒',t:'Children',p:['SurplusLink is intended for students and staff of a university campus and for partner organisations. It is not directed at young children.']},
-       {i:'🔄',t:'Changes to this policy',p:['If we add real servers, analytics or integrations, we will update this policy first and clearly highlight what changed. The “Last updated” date above always shows the latest version.']},
-       {i:'✉️',t:'Contact us',p:['Questions or concerns about privacy? Email you@example.com. Replace this address with your team’s real contact before launch.']}],
-      faq:[['Do you send my data anywhere?','No. In this prototype nothing is sent to any server.'],['Can you recover my account if I forget my password?','No, because we hold no copy of your data. Create a new account instead.'],['Do you use cookies?','Only your browser’s local storage, for your account and login session. No advertising or analytics cookies.'],['How do I delete everything?','Log out, then clear site data for this page in your browser settings.']]}
+       {i:'👋',t:'Our approach to privacy',p:['SurplusLink is a student project built to show how campus food recovery can work with a real, working backend. We collect as little information as possible, and we explain exactly what is stored, where, and why.']},
+       {i:'🗂️',t:'What we store',p:['When you create an account, the following is saved in our Supabase database:'],l:['Your full name and email address','Your role (kitchen, partner, student, volunteer or admin) and, for kitchens and partners, your organisation\'s name, address and capacity','Surplus listings, reservations and the audit trail of their status changes','Meal logs and RSVPs, if you use those features','Notifications sent to your account','A pickup code is stored only as a one-way scrambled (hashed) value — even we cannot read the original code back out of the database'],n:['w','Your password is never stored or seen by us: it is handled entirely by Supabase Authentication, an industry-standard login system.']},
+       {i:'🎯',t:'Why we use it',p:['Your information is used to run the platform: matching surplus to partners, showing you the right dashboard, generating your kitchen\'s forecast, and keeping an audit trail for food safety. It is not used for profiling, advertising or sold to anyone.']},
+       {i:'🖥️',t:'Where data lives',p:['Your account and activity data is stored in Supabase, a hosted Postgres database. Database rules (Row Level Security) restrict what each account can read or write — for example, a partner account cannot read another partner\'s reservations, and a student account can only ever see its own RSVPs.'],n:['g','Your browser also keeps a small login session token locally so you stay signed in between visits. This token identifies your session, not you personally, and is cleared when you log out.']},
+       {i:'🍪',t:'Cookies and tracking',p:['SurplusLink does not set advertising or analytics cookies and does not use tracking pixels, fingerprinting or social-media trackers. The only thing kept in your browser is the login session described above.']},
+       {i:'🤝',t:'Sharing with others',p:['We do not sell, rent or share your personal information with third parties for marketing. Other users see only what the platform\'s design requires — for example, a partner sees a kitchen\'s name and address on a listing it could collect, because that is needed to complete a handoff.']},
+       {i:'⏳',t:'How long data is kept',p:['Account and activity data is kept while your account is active. Logging out ends your local session but does not delete your account or its data — to delete your account and its data, contact us using the details below.']},
+       {i:'🛠️',t:'Your choices and rights',p:['You stay in charge of your information:'],l:['Ask us what data we hold about your account using the contact below','Ask us to correct inaccurate information','Ask us to delete your account and associated data','Log out at any time using the button in the top bar'],n:['g','As this grows beyond a student project, we intend to add self-service access, correction and deletion tools that follow applicable Indian data-protection law. Until then, these requests are handled by the team directly.']},
+       {i:'🔐',t:'Security',p:['Your password is handled by Supabase Authentication and is never visible to us. Access to your data is restricted by your account role at the database level, not only by what the screen shows you. No system is perfectly secure, so please still use a strong, unique password and log out on shared devices.']},
+       {i:'🧒',t:'Children',p:['SurplusLink is intended for university students and staff, and for partner organisations, who we expect to be adults. It is not directed at, and should not be used by, children.']},
+       {i:'🔄',t:'Changes to this policy',p:['If we change what we collect or how we use it, we will update this policy first and clearly highlight what changed. The “Last updated” date above always shows the latest version.']},
+       {i:'✉️',t:'Contact us',p:['Questions or concerns about privacy, including requests to access or delete your data? Email you@example.com. Replace this address with your team\'s real contact before launch.']}],
+      faq:[['Is my data sent to a server now?','Yes. Earlier prototype versions of this page said data stayed only in your browser; that is no longer accurate. Accounts and activity are now stored in a real Supabase database, protected by role-based access rules.'],['Can you recover my account if I forget my password?','Yes — use the “forgot password” option where available, or contact us. Because Supabase Authentication manages passwords, we cannot see your old password, but we can help you reset it.'],['Do you use cookies?','Only a login session token kept in your browser so you stay signed in. No advertising or analytics cookies.'],['How do I delete everything?','Contact us using the details above and we will delete your account and its associated data.']]}
     }[k];
+
     const sec=L.secs.map((s,i)=>`<section class="panel lg-sec" id="lg-${i}"><h3><span class="lg-n">${i+1}</span><span>${s.i}</span> ${s.t}</h3>${s.p.map(x=>`<p>${x}</p>`).join('')}${s.l?`<ul class="lg-list">${s.l.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}${s.n?`<div class="lg-note ${s.n[0]}">${s.n[1]}</div>`:''}</section>`).join('');
     return `<div class="lg-hero"><div class="eyebrow" style="color:#fff;opacity:.85">LEGAL · PROTOTYPE</div><h2>${L.title}</h2><p>${L.blurb}</p><div class="lg-meta"><span>Last updated 3 November 2026</span><span>${L.secs.length} sections</span><span>~${Math.max(3,Math.round(L.secs.length*.45))} min read</span></div><div class="big">${L.icon}</div></div>
     <div class="lg-key">${L.key.map(x=>`<div class="card"><div class="lg-ico">${x[0]}</div><b>${x[1]}</b><p class="sub" style="margin:4px 0 0">${x[2]}</p></div>`).join('')}</div>
@@ -748,7 +870,7 @@
     const up=mode==='signup',nx=NAMES[next]?'&next='+next:'';
     return `<div class="auth-wrap"><section class="auth-card"><div class="logo">↗</div><h2>${up?'Create your account':'Welcome back'}</h2><div class="sub">${up?'Join the campus food-recovery network.':'Log in to manage surplus listings and partner pickups.'}</div>
     <div class="auth-tabs"><a href="#/auth?mode=signin${nx}" class="${up?'':'on'}">Log In</a><a href="#/auth?mode=signup${nx}" class="${up?'on':''}">Sign Up</a></div>
-    <form id="authForm" novalidate>${up?'<label class="field">Full name<input name="name" autocomplete="name" placeholder="e.g. Nimish Khandelwal"></label><label class="field">I am a<select name="role"><option value="kitchen">Campus kitchen / coordinator</option><option value="partner">Partner organisation</option></select></label>':''}
+    <form id="authForm" novalidate>${up?'<label class="field">Full name<input name="name" autocomplete="name" placeholder="e.g. Nimish Khandelwal"></label><label class="field">I am a<select name="role"><option value="kitchen">Campus kitchen / coordinator</option><option value="partner">Partner organisation</option><option value="student">Student (RSVP for hostel meals)</option></select></label>':''}
     <label class="field">Email<input name="email" type="email" autocomplete="email" placeholder="you@campus.edu"></label>
     <label class="field">Password<input name="password" type="password" autocomplete="${up?'new-password':'current-password'}" placeholder="${up?'At least 8 characters':'Your password'}"></label>
     <div class="auth-err" id="authErr" role="alert"></div><button class="btn primary" style="width:100%" type="submit">${up?'Create account':'Log In'}</button></form>
@@ -762,7 +884,7 @@
       if(user){await loadListings();startRealtime()}
       if(!user)return fail('Signed in, but your profile could not be loaded. Please try again.');
       message('Welcome, '+user.name.split(' ')[0]+'!');
-      go(needsOrg(user)?'#/setup':'#/'+(NAMES[next]?next:'dashboard'));
+      go(needsOrg(user)?'#/setup':(user.role==='student'?'#/meals':'#/'+(NAMES[next]?next:'dashboard')));
     };
     form.onsubmit=async e=>{
       e.preventDefault();err.style.color='';err.textContent='';
@@ -772,7 +894,7 @@
       btn.disabled=true;
       try{
         if(mode==='signup'){
-          const name=String(f.get('name')||'').trim(),role=f.get('role')==='partner'?'partner':'kitchen';
+          const name=String(f.get('name')||'').trim(),roleRaw=f.get('role'),role=['partner','student'].includes(roleRaw)?roleRaw:'kitchen';
           if(name.length<2)return fail('Please enter your name.');
           if(pw.length<8)return fail('Password must be at least 8 characters.');
           const{data,error}=await sb.auth.signUp({email,password:pw,options:{data:{full_name:name,role}}});
@@ -817,6 +939,7 @@
     if(NAMES[path]&&!user){location.hash='#/auth?mode=signin&next='+path;return}
     if(path==='auth'&&user){location.hash=needsOrg(user)?'#/setup':'#/dashboard';return}
     if(NAMES[path]&&needsOrg(user)){location.hash='#/setup';return}
+    if(NAMES[path]&&user&&user.role==='student'&&path!=='listings'){location.hash='#/meals';return}
     if(path==='setup'&&!needsOrg(user)){location.hash=user?'#/dashboard':'#/auth?mode=signin';return}
     current=TITLES[path]?path:'home';
     document.title=(TITLES[current])+' — SurplusLink';
@@ -824,6 +947,7 @@
     if(NAMES[current])renderPage(NAMES[current]);
     else if(current==='auth'){const mode=q.get('mode')==='signup'?'signup':'signin',nx=q.get('next');main.innerHTML=authPage(mode,nx);bindAuth(mode,nx)}
     else if(current==='setup'){main.innerHTML=setupPage();bindSetup()}
+    else if(current==='meals'){if(!user){location.hash='#/auth?mode=signin&next=meals';return}main.innerHTML='<div class="empty">Loading…</div>';loadMealsPage()}
     else if(current==='about')main.innerHTML=aboutPage();
     else if(current==='terms'||current==='privacy'){main.innerHTML=legalPage(current);bindLegal()}
     else{main.innerHTML=homePage();animateCounts()}
